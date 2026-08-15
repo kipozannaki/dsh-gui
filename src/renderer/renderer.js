@@ -231,15 +231,33 @@ function injectDshSkin() {
   const strength = Math.min(1, Math.max(0, boot.config.skin.dshOpacity ?? 0));
   const script = `(() => {
     window.__dshSkinStrength = ${strength};
+    const isLightColor = (r, g, b) => r >= 225 && g >= 225 && b >= 225;
     const isLight = (c) => {
       const m = c.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/);
-      return !!m && (+m[1] >= 230 && +m[2] >= 230 && +m[3] >= 230);
+      return !!m && isLightColor(+m[1], +m[2], +m[3]);
+    };
+    // 浅色渐变（如 fade 到白色的 linear-gradient）也会形成白色区域，一并扣掉
+    const gradientIsLight = (img) => {
+      if (!img.includes('gradient')) return false;
+      const colors = img.matchAll(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)(?:,\\s*([\\d.]+))?\\)/g);
+      let count = 0;
+      for (const m of colors) {
+        count++;
+        const a = m[4] === undefined ? 1 : parseFloat(m[4]);
+        if (a > 0.02 && !isLightColor(+m[1], +m[2], +m[3])) return false;
+      }
+      return count > 0;
     };
     const apply = () => {
       const s = window.__dshSkinStrength;
       for (const el of document.querySelectorAll('body, *')) {
         const cs = getComputedStyle(el);
         if (isLight(cs.backgroundColor)) {
+          el.style.setProperty('background-color', 'rgba(255,255,255,' + s + ')', 'important');
+        }
+        const img = cs.backgroundImage;
+        if (img !== 'none' && gradientIsLight(img)) {
+          el.style.setProperty('background-image', 'none', 'important');
           el.style.setProperty('background-color', 'rgba(255,255,255,' + s + ')', 'important');
         }
       }
