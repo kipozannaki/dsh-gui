@@ -9,6 +9,7 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
 const net = require('node:net');
+const os = require('node:os');
 
 const DSH_PACKAGE = '@deepseek-ai/dsh';
 const DSH_VERSION = '0.1.0-rc.6'; // 版本锁定：与官方 rc 版本区分，保证稳定性
@@ -42,6 +43,21 @@ const APP = {
 // ---------------------------------------------------------------------------
 // 路径与模式（便携版 / 安装版 / 开发模式）
 // ---------------------------------------------------------------------------
+/**
+ * DSH_HOME 解析：优先复用用户的配置，避免每次重新输入 API Key。
+ *   1) 用户显式设置的环境变量 DSH_HOME
+ *   2) 用户默认主目录 ~/.dsh（npx / 官方 CLI 使用的位置，含已配置的
+ *      settings.yaml / .credentials.yaml / 会话）→ 直接继承，与 npx 行为一致
+ *   3) 应用私有目录（全新用户）
+ */
+function resolveDshHome() {
+  const envHome = process.env.DSH_HOME;
+  if (envHome && envHome.trim()) return path.resolve(envHome.trim());
+  const userHome = path.join(os.homedir(), '.dsh');
+  if (fs.existsSync(userHome)) return userHome;
+  return path.join(APP.dataDir, 'dsh-home');
+}
+
 function resolveAppPaths() {
   const portableDir = process.env.PORTABLE_EXECUTABLE_DIR;
   if (app.isPackaged && portableDir) {
@@ -58,7 +74,7 @@ function resolveAppPaths() {
     APP.dataDir = path.join(APP.rootDir, '.dev-data');
   }
   APP.logsDir = path.join(APP.dataDir, 'logs');
-  APP.dshHome = path.join(APP.dataDir, 'dsh-home');
+  APP.dshHome = resolveDshHome();
   APP.runtimeDir = path.join(APP.dataDir, 'dsh-runtime');
 }
 
@@ -683,6 +699,8 @@ async function _startService(retryWithRandom = false) {
 // API Key 检测（首次使用引导）
 // ---------------------------------------------------------------------------
 function apiKeyConfigured() {
+  // 凭据文件存在即视为已配置（DSH 的 API Key 主要存于 .credentials.yaml）
+  if (fs.existsSync(path.join(APP.dshHome, '.credentials.yaml'))) return true;
   for (const file of ['settings.yaml', 'settings.yml', 'settings.json']) {
     try {
       const content = fs.readFileSync(path.join(APP.dshHome, file), 'utf8');
