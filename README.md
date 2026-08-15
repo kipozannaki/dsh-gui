@@ -6,6 +6,8 @@
 
 DeepSeek Harness 的 Windows 桌面客户端 —— **开箱即用**：自动复用系统 Node.js（版本符合要求时免内置运行时），否则使用内置 Node；首次启动自动部署 DSH 并在桌面窗口中直接使用 Web UI。
 
+> 💡 **macOS 版本正在开发中**，敬请期待。
+
 > 界面：深色现代风格（参考 Codex / Claude Code 设计语言），左侧边栏 + 顶部状态栏 + 嵌入的 DSH Web UI。
 
 ## ✨ 功能特性
