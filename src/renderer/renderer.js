@@ -195,36 +195,43 @@ async function refreshLogs() {
 }
 
 // ---------------------------------------------------------------------------
-// 换肤
+// 换肤：壁纸垫底（窗口背景），DSH 页面文字在其上清晰显示——绝不叠加蒙版
 // ---------------------------------------------------------------------------
 function applySkin() {
   const skin = boot.config.skin;
   document.body.dataset.skin = skin.preset || 'midnight';
   const img = $('bg-img');
-  const blend = $('blend');
   const hasImage = skin.preset === 'image' && skin.image;
   const blur = Math.max(0, skin.blur || 0);
-  const clamp01 = (v) => Math.min(1, Math.max(0, v));
 
   if (hasImage) {
-    // 自定义图片：整窗背景清晰显示；主区域叠加半透明融合层（模糊可调，0 = 完全清晰）
     img.src = 'file:///' + skin.image.replace(/\\/g, '/');
     img.classList.add('on');
-    img.style.opacity = '1';
     img.style.filter = blur > 0 ? `blur(${blur}px)` : 'none';
-    blend.style.backgroundImage = `url("file:///${skin.image.replace(/\\/g, '/')}")`;
-    blend.style.opacity = String(clamp01(skin.opacity ?? 0.5));
-    blend.style.filter = blur > 0 ? `blur(${blur}px)` : 'none';
   } else {
-    // 预设皮肤：整窗背景 + 主区域同款渐变清晰叠加（不模糊，柔和但不糊）
     img.classList.remove('on');
-    img.style.opacity = '0';
     img.style.filter = 'none';
-    blend.style.backgroundImage = 'var(--skin)';
-    blend.style.opacity = String(clamp01(skin.presetOpacity ?? 0.22));
-    blend.style.filter = 'none';
   }
   renderSkinGrid();
+  injectDshSkin();
+}
+
+/** 把 DSH 界面的白底改为半透明白色：壁纸从页面下方透出，文字保持清晰。 */
+function injectDshSkin() {
+  const wv = $('dsh-web');
+  if (!wv || !wv.src) return;
+  const skin = boot.config.skin;
+  // 强度 1 = DSH 原样白底（同样注入白色不透明规则，覆盖此前注入的半透明值）
+  const strength = Math.min(1, Math.max(0.6, skin.dshOpacity ?? 0.9));
+  const css = [
+    'html, body, #root, [class*="_frame"], [class*="_root"] {',
+    `  background-color: rgba(255, 255, 255, ${strength}) !important;`,
+    '  background-image: none !important;',
+    '}'
+  ].join('\n');
+  try {
+    wv.insertCSS(css).catch(() => {});
+  } catch { /* ignore */ }
 }
 
 function renderSkinGrid() {
@@ -249,16 +256,12 @@ function renderSkinGrid() {
   }
 }
 
-/** 模糊/强度滑块仅对自定义图片生效；预设皮肤时禁用并提示。 */
+/** 壁纸模糊滑块仅对自定义图片生效。 */
 function refreshSkinSliders() {
   const isImage = boot.config.skin.preset === 'image' && !!boot.config.skin.image;
-  $('set-opacity').disabled = !isImage;
   $('set-blur').disabled = !isImage;
-  $('set-opacity').closest('.set-row').querySelector('.hint').textContent = isImage
-    ? '自定义背景图时生效，数值越大越明显'
-    : '预设皮肤自动清晰展示，此滑块仅自定义图片可用';
   $('set-blur').closest('.set-row').querySelector('.hint').textContent = isImage
-    ? '自定义背景图时生效，0 = 完全清晰'
+    ? '仅自定义图片时生效，0 = 完全清晰'
     : '预设皮肤自动清晰展示，此滑块仅自定义图片可用';
 }
 
@@ -271,8 +274,8 @@ function openSettings() {
   $('set-mirror').checked = !!boot.config.mirror;
   $('set-autorestart').checked = !!boot.config.autoRestart;
   $('set-autolaunch').checked = !!boot.config.autoLaunch;
-  $('set-opacity').value = Math.round((boot.config.skin.opacity ?? 0.5) * 100);
-  $('set-blur').value = boot.config.skin.blur ?? 6;
+  $('set-dshopacity').value = Math.round((boot.config.skin.dshOpacity ?? 0.9) * 100);
+  $('set-blur').value = boot.config.skin.blur ?? 0;
   refreshSkinSliders();
   renderAbout();
 }
@@ -343,6 +346,8 @@ async function init() {
   const wv = $('dsh-web');
   wv.addEventListener('dom-ready', () => {
     if (currentView === 'home') wv.classList.remove('hidden');
+    // 页面加载完成后注入皮肤透出（壁纸垫底、文字清晰）
+    injectDshSkin();
   });
   wv.addEventListener('did-fail-load', (e) => {
     if (e.code !== -3) toast('DSH 界面加载失败，请检查服务状态', true);
@@ -401,11 +406,12 @@ async function init() {
     boot.config.autoLaunch = e.target.checked;
     toast(e.target.checked ? '已开启开机自启动' : '已关闭开机自启动');
   });
-  $('set-opacity').addEventListener('input', (e) => {
-    const opacity = parseInt(e.target.value, 10) / 100;
-    boot.config.skin.opacity = opacity;
-    bridge.setConfig({ skin: { opacity } });
-    applySkin();
+  $('set-dshopacity').addEventListener('input', (e) => {
+    const dshOpacity = parseInt(e.target.value, 10) / 100;
+    boot.config.skin.dshOpacity = dshOpacity;
+    bridge.setConfig({ skin: { dshOpacity } });
+    injectDshSkin();
+    if (dshOpacity >= 1) toast('DSH 界面已恢复原样白底（100% 不透明）');
   });
   $('set-blur').addEventListener('input', (e) => {
     const blur = parseInt(e.target.value, 10);

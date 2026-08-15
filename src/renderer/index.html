@@ -67,10 +67,9 @@
       </header>
 
       <div id="content">
-        <!-- DSH Web UI 嵌入 -->
+        <!-- DSH Web UI 嵌入（壁纸在页面下方透出，绝不叠加蒙版） -->
         <div id="view-home" class="view">
           <webview id="dsh-web" partition="persist:dsh-gui-web" allowpopups="false"></webview>
-          <div id="blend" aria-hidden="true"></div>
         </div>
 
         <!-- 日志视图 -->
@@ -173,14 +172,14 @@
                 </div>
               </div>
               <div class="set-row">
-                <label for="set-opacity">背景融合强度</label>
-                <input type="range" id="set-opacity" min="0" max="80" step="1" />
-                <span class="hint">自定义背景图时生效，数值越大越明显</span>
+                <label for="set-dshopacity">界面透出强度</label>
+                <input type="range" id="set-dshopacity" min="60" max="100" step="1" />
+                <span class="hint">DSH 界面的不透明度：100 = 原样白底；数值越小壁纸透出越明显（文字始终清晰）</span>
               </div>
               <div class="set-row">
-                <label for="set-blur">背景模糊</label>
-                <input type="range" id="set-blur" min="0" max="60" step="1" />
-                <span class="hint">自定义背景图时生效，0 = 完全清晰</span>
+                <label for="set-blur">壁纸模糊</label>
+                <input type="range" id="set-blur" min="0" max="40" step="1" />
+                <span class="hint">仅自定义图片时生效，0 = 完全清晰</span>
               </div>
             </section>
 

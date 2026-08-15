@@ -194,12 +194,7 @@ body[data-skin="mesh"] {
 #dsh-web {
   position: absolute; inset: 0;
   width: 100%; height: 100%;
-  background: #0b0e16;
-}
-#blend {
-  position: absolute; inset: 0; pointer-events: none; z-index: 5;
-  background-size: cover; background-position: center;
-  opacity: 0; filter: blur(18px); transition: opacity 0.3s ease;
+  background: transparent; /* 页面加载前透出窗口皮肤；DSH 界面注入半透明白底后透出壁纸 */
 }
 
 /* ---------- 日志视图 ---------- */

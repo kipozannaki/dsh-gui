@@ -111,7 +111,8 @@ const DEFAULT_CONFIG = {
   mirror: true,
   autoLaunch: false,
   autoRestart: true,
-  skin: { preset: 'midnight', image: null, opacity: 0.5, blur: 6 }
+  // skin: 壁纸/皮肤垫底显示，DSH 界面透出强度 dshOpacity（1 = 原样白底）
+  skin: { preset: 'midnight', image: null, blur: 0, dshOpacity: 0.9 }
 };
 
 function loadConfig() {
@@ -119,10 +120,10 @@ function loadConfig() {
     const raw = JSON.parse(fs.readFileSync(path.join(APP.dataDir, 'config.json'), 'utf8'));
     const savedSkin = raw.skin || {};
     let needsSave = false;
-    // 迁移旧版默认值（旧: opacity 0.32 / blur 18 → 新: 0.5 / 6），让皮肤更清晰
-    if (savedSkin.opacity === 0.32 && savedSkin.blur === 18) {
-      savedSkin.opacity = DEFAULT_CONFIG.skin.opacity;
-      savedSkin.blur = DEFAULT_CONFIG.skin.blur;
+    // 迁移旧版换肤配置（旧: 蒙版 opacity 0.32 / blur 18 → 新: 无蒙版，blur 0）
+    if (savedSkin.opacity !== undefined) {
+      delete savedSkin.opacity;
+      if (savedSkin.blur === 18) savedSkin.blur = 0;
       raw.skin = savedSkin;
       needsSave = true;
     }
