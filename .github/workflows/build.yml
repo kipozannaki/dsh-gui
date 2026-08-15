@@ -54,3 +54,5 @@ jobs:
             dist/DSH-GUI-Setup-*.exe
             dist/DSH-GUI-Portable-*.exe
           fail_on_unmatched_files: false
+          overwrite_files: false
+          update_release_body: false
