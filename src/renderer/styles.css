@@ -6,9 +6,9 @@
   --font-ui: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
   --font-mono: "Cascadia Mono", Consolas, "JetBrains Mono", monospace;
 
-  --panel: rgba(18, 23, 36, 0.82);
+  --panel: rgba(16, 21, 34, 0.62);
   --panel-solid: #121724;
-  --panel-2: rgba(26, 33, 51, 0.9);
+  --panel-2: rgba(22, 28, 45, 0.68);
   --border: rgba(148, 163, 184, 0.14);
   --border-strong: rgba(148, 163, 184, 0.28);
 
@@ -45,27 +45,27 @@ body {
 
 /* ---------- 皮肤（背景换肤） ---------- */
 body[data-skin="midnight"] {
-  --skin: linear-gradient(160deg, #0d1119 0%, #101826 45%, #141b2e 100%);
-  --skin-accent-hint: rgba(79, 140, 255, 0.10);
+  --skin: linear-gradient(160deg, #0b0f18 0%, #101c33 48%, #17233e 100%);
+  --skin-accent-hint: rgba(79, 140, 255, 0.12);
 }
 body[data-skin="aurora"] {
-  --skin: linear-gradient(155deg, #0e0b24 0%, #241d4f 48%, #0e1b33 100%);
-  --skin-accent-hint: rgba(124, 108, 255, 0.14);
+  --skin: linear-gradient(155deg, #0d0930 0%, #332768 48%, #10203f 100%);
+  --skin-accent-hint: rgba(124, 108, 255, 0.18);
 }
 body[data-skin="ocean"] {
-  --skin: linear-gradient(160deg, #00141d 0%, #043042 52%, #001c2a 100%);
-  --skin-accent-hint: rgba(52, 211, 238, 0.10);
+  --skin: linear-gradient(160deg, #001722 0%, #07536e 55%, #02384d 100%);
+  --skin-accent-hint: rgba(52, 211, 238, 0.14);
 }
 body[data-skin="ember"] {
-  --skin: linear-gradient(160deg, #180b0d 0%, #3a1218 50%, #1c0f12 100%);
-  --skin-accent-hint: rgba(245, 184, 76, 0.10);
+  --skin: linear-gradient(160deg, #200d11 0%, #5c1a24 52%, #2e1318 100%);
+  --skin-accent-hint: rgba(245, 184, 76, 0.14);
 }
 body[data-skin="mesh"] {
   --skin:
-    radial-gradient(circle at 18% 22%, rgba(79, 140, 255, 0.16), transparent 42%),
-    radial-gradient(circle at 82% 70%, rgba(124, 108, 255, 0.16), transparent 44%),
-    linear-gradient(160deg, #0c1020 0%, #131a30 60%, #0d1224 100%);
-  --skin-accent-hint: rgba(124, 108, 255, 0.08);
+    radial-gradient(circle at 18% 22%, rgba(79, 140, 255, 0.30), transparent 42%),
+    radial-gradient(circle at 82% 70%, rgba(124, 108, 255, 0.30), transparent 44%),
+    linear-gradient(160deg, #0b1022 0%, #182448 60%, #0d1428 100%);
+  --skin-accent-hint: rgba(124, 108, 255, 0.12);
 }
 
 /* 背景层 */
@@ -87,7 +87,7 @@ body[data-skin="mesh"] {
   flex: 0 0 var(--sidebar-w);
   display: flex; flex-direction: column;
   background: var(--panel);
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(5px);
   border-right: 1px solid var(--border);
 }
 
@@ -152,7 +152,7 @@ body[data-skin="mesh"] {
   display: flex; align-items: center; gap: 8px;
   padding: 0 6px 0 14px;
   background: var(--panel);
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(5px);
   border-bottom: 1px solid var(--border);
   -webkit-app-region: drag;
 }
@@ -377,15 +377,15 @@ button { font-family: inherit; }
   position: absolute; left: 8px; bottom: 6px; font-size: 10.5px;
   color: rgba(255, 255, 255, 0.85); text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
-.skin-midnight { background: linear-gradient(160deg, #0d1119, #141b2e); }
-.skin-aurora { background: linear-gradient(155deg, #0e0b24, #241d4f, #0e1b33); }
-.skin-ocean { background: linear-gradient(160deg, #00141d, #043042, #001c2a); }
-.skin-ember { background: linear-gradient(160deg, #180b0d, #3a1218, #1c0f12); }
+.skin-midnight { background: linear-gradient(160deg, #0b0f18, #101c33, #17233e); }
+.skin-aurora { background: linear-gradient(155deg, #0d0930, #332768, #10203f); }
+.skin-ocean { background: linear-gradient(160deg, #001722, #07536e, #02384d); }
+.skin-ember { background: linear-gradient(160deg, #200d11, #5c1a24, #2e1318); }
 .skin-mesh {
   background:
     radial-gradient(circle at 18% 22%, rgba(79, 140, 255, 0.35), transparent 42%),
     radial-gradient(circle at 82% 70%, rgba(124, 108, 255, 0.35), transparent 44%),
-    linear-gradient(160deg, #0c1020, #131a30);
+    linear-gradient(160deg, #0b1022, #182448);
 }
 .skin-image {
   background: repeating-conic-gradient(#1b2337 0% 25%, #202a42 0% 50%) 0 0 / 22px 22px;
@@ -394,6 +394,7 @@ button { font-family: inherit; }
 .file-wrap { display: flex; gap: 8px; align-items: center; flex: 1; }
 #file-wallpaper { display: none; }
 input[type="range"] { flex: 1; min-width: 140px; accent-color: var(--accent); }
+input[type="range"]:disabled { opacity: 0.35; cursor: not-allowed; }
 
 .about-grid { font-size: 12.5px; color: var(--text-2); line-height: 1.9; }
 .about-grid b { color: var(--text-1); font-weight: 600; }

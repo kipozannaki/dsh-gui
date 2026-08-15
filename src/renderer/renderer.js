@@ -203,23 +203,26 @@ function applySkin() {
   const img = $('bg-img');
   const blend = $('blend');
   const hasImage = skin.preset === 'image' && skin.image;
+  const blur = Math.max(0, skin.blur || 0);
+  const clamp01 = (v) => Math.min(1, Math.max(0, v));
 
   if (hasImage) {
+    // 自定义图片：整窗背景清晰显示；主区域叠加半透明融合层（模糊可调，0 = 完全清晰）
     img.src = 'file:///' + skin.image.replace(/\\/g, '/');
     img.classList.add('on');
+    img.style.opacity = '1';
+    img.style.filter = blur > 0 ? `blur(${blur}px)` : 'none';
     blend.style.backgroundImage = `url("file:///${skin.image.replace(/\\/g, '/')}")`;
+    blend.style.opacity = String(clamp01(skin.opacity ?? 0.5));
+    blend.style.filter = blur > 0 ? `blur(${blur}px)` : 'none';
   } else {
+    // 预设皮肤：整窗背景 + 主区域同款渐变清晰叠加（不模糊，柔和但不糊）
     img.classList.remove('on');
-    blend.style.backgroundImage = 'none';
-  }
-  img.style.opacity = hasImage ? 1 : 0;
-  img.style.filter = `blur(${skin.blur || 0}px)`;
-  blend.style.opacity = hasImage ? (skin.opacity || 0.32) : 0;
-  blend.style.filter = `blur(${skin.blur || 18}px)`;
-  // 无图片时也保留一点皮肤氛围在主区域（融合层用纯色）
-  if (!hasImage) {
+    img.style.opacity = '0';
+    img.style.filter = 'none';
     blend.style.backgroundImage = 'var(--skin)';
-    blend.style.opacity = 0.06;
+    blend.style.opacity = String(clamp01(skin.presetOpacity ?? 0.22));
+    blend.style.filter = 'none';
   }
   renderSkinGrid();
 }
@@ -239,10 +242,24 @@ function renderSkinGrid() {
       bridge.setConfig(patch).then(() => {
         boot.config.skin = patch.skin;
         applySkin();
+        refreshSkinSliders();
       });
     });
     grid.appendChild(card);
   }
+}
+
+/** 模糊/强度滑块仅对自定义图片生效；预设皮肤时禁用并提示。 */
+function refreshSkinSliders() {
+  const isImage = boot.config.skin.preset === 'image' && !!boot.config.skin.image;
+  $('set-opacity').disabled = !isImage;
+  $('set-blur').disabled = !isImage;
+  $('set-opacity').closest('.set-row').querySelector('.hint').textContent = isImage
+    ? '自定义背景图时生效，数值越大越明显'
+    : '预设皮肤自动清晰展示，此滑块仅自定义图片可用';
+  $('set-blur').closest('.set-row').querySelector('.hint').textContent = isImage
+    ? '自定义背景图时生效，0 = 完全清晰'
+    : '预设皮肤自动清晰展示，此滑块仅自定义图片可用';
 }
 
 // ---------------------------------------------------------------------------
@@ -254,8 +271,9 @@ function openSettings() {
   $('set-mirror').checked = !!boot.config.mirror;
   $('set-autorestart').checked = !!boot.config.autoRestart;
   $('set-autolaunch').checked = !!boot.config.autoLaunch;
-  $('set-opacity').value = Math.round((boot.config.skin.opacity || 0.32) * 100);
-  $('set-blur').value = boot.config.skin.blur || 18;
+  $('set-opacity').value = Math.round((boot.config.skin.opacity ?? 0.5) * 100);
+  $('set-blur').value = boot.config.skin.blur ?? 6;
+  refreshSkinSliders();
   renderAbout();
 }
 function closeSettings() {
@@ -434,6 +452,7 @@ async function init() {
   boot = await bridge.bootstrap();
   $('foot-meta').textContent = `v${boot.version} · ${boot.isPortable ? '便携版' : '安装版'} · Node ${boot.nodeVersion || '-'} · dsh ${boot.dshVersion || '未安装'}`;
   applySkin();
+  refreshSkinSliders();
   applyState(boot.service || { state: 'idle' });
 
   // 首次进入时若服务尚未运行则自动启动（主进程已自动启动）

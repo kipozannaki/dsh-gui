@@ -111,13 +111,23 @@ const DEFAULT_CONFIG = {
   mirror: true,
   autoLaunch: false,
   autoRestart: true,
-  skin: { preset: 'midnight', image: null, opacity: 0.32, blur: 18 }
+  skin: { preset: 'midnight', image: null, opacity: 0.5, blur: 6 }
 };
 
 function loadConfig() {
   try {
-    const raw = fs.readFileSync(path.join(APP.dataDir, 'config.json'), 'utf8');
-    config = { ...DEFAULT_CONFIG, ...JSON.parse(raw), skin: { ...DEFAULT_CONFIG.skin, ...(JSON.parse(raw).skin || {}) } };
+    const raw = JSON.parse(fs.readFileSync(path.join(APP.dataDir, 'config.json'), 'utf8'));
+    const savedSkin = raw.skin || {};
+    let needsSave = false;
+    // 迁移旧版默认值（旧: opacity 0.32 / blur 18 → 新: 0.5 / 6），让皮肤更清晰
+    if (savedSkin.opacity === 0.32 && savedSkin.blur === 18) {
+      savedSkin.opacity = DEFAULT_CONFIG.skin.opacity;
+      savedSkin.blur = DEFAULT_CONFIG.skin.blur;
+      raw.skin = savedSkin;
+      needsSave = true;
+    }
+    config = { ...DEFAULT_CONFIG, ...raw, skin: { ...DEFAULT_CONFIG.skin, ...savedSkin } };
+    if (needsSave) saveConfig();
   } catch {
     config = { ...DEFAULT_CONFIG, skin: { ...DEFAULT_CONFIG.skin } };
   }
