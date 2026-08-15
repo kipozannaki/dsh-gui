@@ -148,8 +148,10 @@ function saveConfig() {
 }
 
 // ---------------------------------------------------------------------------
-// 内置 Node 运行时
+// Node 运行时解析：优先复用系统 Node（>= MIN_NODE_VERSION 时跳过内置运行时）
 // ---------------------------------------------------------------------------
+const MIN_NODE_VERSION = '22.19.0';
+
 function nodeRuntimeDir() {
   if (app.isPackaged) {
     return path.join(process.resourcesPath, 'node-runtime');
@@ -157,44 +159,99 @@ function nodeRuntimeDir() {
   return path.join(APP.rootDir, 'resources', 'node-runtime');
 }
 
-async function resolveNode() {
-  if (nodeInfo) return nodeInfo;
-  const dir = nodeRuntimeDir();
-  const bin = path.join(dir, 'node.exe');
-  if (fs.existsSync(bin)) {
-    const version = await new Promise((resolve) => {
-      const p = spawn(bin, ['--version'], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
-      let out = '';
-      p.stdout.on('data', (d) => (out += d));
-      p.on('close', () => resolve(out.trim()));
-      p.on('error', () => resolve(''));
-    });
-    nodeInfo = { dir, bin, version };
-    log(`使用内置 Node: ${bin} (${version})`);
-    return nodeInfo;
+function parseVersion(v) {
+  const m = String(v || '').trim().replace(/^v/i, '').match(/^(\d+)\.(\d+)\.(\d+)/);
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+}
+
+function versionAtLeast(v, min) {
+  const a = parseVersion(v);
+  const b = parseVersion(min);
+  if (!a || !b) return false;
+  for (let i = 0; i < 3; i++) {
+    if (a[i] !== b[i]) return a[i] > b[i];
   }
-  // 开发模式下退回系统 node
-  const sys = await new Promise((resolve) => {
-    const p = spawn('node', ['--version'], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  return true;
+}
+
+function probeNode(bin) {
+  return new Promise((resolve) => {
+    const p = spawn(bin, ['--version'], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '';
     p.stdout.on('data', (d) => (out += d));
     p.on('close', () => resolve(out.trim()));
     p.on('error', () => resolve(''));
   });
-  if (sys) {
-    nodeInfo = { dir: '', bin: 'node', version: sys };
-    log(`未找到内置 Node，退回系统 node (${sys})`);
-    return nodeInfo;
+}
+
+/** 探测系统 Node：版本 + 可执行文件路径（一次调用）。 */
+function probeSystemNode() {
+  return new Promise((resolve) => {
+    const p = spawn('node', ['-e', 'process.stdout.write(JSON.stringify({ v: process.version, p: process.execPath }))'], {
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    let out = '';
+    p.stdout.on('data', (d) => (out += d));
+    p.on('close', () => {
+      try {
+        resolve(JSON.parse(out));
+      } catch {
+        resolve(null);
+      }
+    });
+    p.on('error', () => resolve(null));
+  });
+}
+
+async function resolveNode() {
+  if (nodeInfo) return nodeInfo;
+
+  // 1) 系统 Node：版本符合要求（>= 22.19.0）→ 直接复用，跳过内置运行时
+  if (process.env.DSH_GUI_FORCE_BUNDLED_NODE !== '1') {
+    const sys = await probeSystemNode();
+    if (sys && sys.v && versionAtLeast(sys.v, MIN_NODE_VERSION)) {
+      nodeInfo = { dir: '', bin: 'node', exePath: sys.p, version: sys.v, source: 'system' };
+      log(`检测到系统 Node ${sys.v}（>= ${MIN_NODE_VERSION}），跳过内置运行时`);
+      return nodeInfo;
+    }
+    if (sys && sys.v) {
+      log(`系统 Node ${sys.v} 低于要求（${MIN_NODE_VERSION}），改用内置运行时`);
+    } else {
+      log('未检测到系统 Node，使用内置运行时');
+    }
+  } else {
+    log('DSH_GUI_FORCE_BUNDLED_NODE 已设置，强制使用内置运行时');
   }
-  throw new Error('内置 Node 运行时缺失（resources/node-runtime/node.exe），请重新安装应用');
+
+  // 2) 内置运行时（随应用分发）
+  const dir = nodeRuntimeDir();
+  const bin = path.join(dir, 'node.exe');
+  if (fs.existsSync(bin)) {
+    const version = await probeNode(bin);
+    if (version) {
+      nodeInfo = { dir, bin, exePath: bin, version, source: 'bundled' };
+      log(`使用内置 Node: ${bin} (${version})`);
+      return nodeInfo;
+    }
+  }
+  throw new Error('找不到可用的 Node.js 运行时（系统 Node 缺失或不满足要求，且内置运行时不可用），请重新安装应用');
+}
+
+/** npm/npx 所在目录：使用系统 Node 时跟随系统 npm，否则用内置 npm。 */
+function npmBaseDir() {
+  if (nodeInfo && nodeInfo.source === 'system' && nodeInfo.exePath) {
+    return path.join(path.dirname(nodeInfo.exePath), 'node_modules', 'npm');
+  }
+  return path.join(nodeRuntimeDir(), 'node_modules', 'npm');
 }
 
 function npmCliJs() {
-  return path.join(nodeRuntimeDir(), 'node_modules', 'npm', 'bin', 'npm-cli.js');
+  return path.join(npmBaseDir(), 'bin', 'npm-cli.js');
 }
 
 function npxCliJs() {
-  return path.join(nodeRuntimeDir(), 'node_modules', 'npm', 'bin', 'npx-cli.js');
+  return path.join(npmBaseDir(), 'bin', 'npx-cli.js');
 }
 
 function nodeEnv(extra = {}) {
@@ -421,6 +478,7 @@ function broadcast() {
     mode: service ? service.mode : null,
     dshVersion: dshInfo ? dshInfo.version : null,
     nodeVersion: nodeInfo ? nodeInfo.version : null,
+    nodeSource: nodeInfo ? nodeInfo.source : null,
     detail: service ? service.detail : '',
     isPortable: APP.isPortable,
     dataDir: APP.dataDir
@@ -739,6 +797,7 @@ function registerIpc() {
       logsDir: APP.logsDir,
       dshHome: APP.dshHome,
       nodeVersion: nodeInfo ? nodeInfo.version : null,
+      nodeSource: nodeInfo ? nodeInfo.source : null,
       dshVersion: dshInfo ? dshInfo.version : null,
       config,
       service: service

@@ -318,9 +318,12 @@ function closeSettings() {
 }
 
 function renderAbout() {
+  const nodeLabel = boot.nodeVersion
+    ? `${boot.nodeVersion}（${boot.nodeSource === 'system' ? '系统 Node，已跳过内置运行时' : '内置运行时'}）`
+    : '未检测到';
   $('about-grid').innerHTML = [
     ['应用版本', boot.version],
-    ['内置 Node', boot.nodeVersion || '未检测到'],
+    ['Node 运行时', nodeLabel],
     ['DSH 版本', boot.dshVersion || '未安装'],
     ['运行模式', boot.isPortable ? '便携版（数据在 exe 同目录 data/）' : '安装版（数据在 %APPDATA%/DSH-GUI/）'],
     ['数据目录', boot.dataDir],
@@ -367,6 +370,7 @@ async function init() {
   bridge.onState((s) => {
     if (s.dshVersion) boot = { ...boot, dshVersion: s.dshVersion };
     if (s.nodeVersion) boot = { ...boot, nodeVersion: s.nodeVersion };
+    if (s.nodeSource) boot = { ...boot, nodeSource: s.nodeSource };
     applyState(s);
   });
   bridge.onWebviewStatus((s) => {
@@ -485,7 +489,7 @@ async function init() {
 
   // 加载引导数据
   boot = await bridge.bootstrap();
-  $('foot-meta').textContent = `v${boot.version} · ${boot.isPortable ? '便携版' : '安装版'} · Node ${boot.nodeVersion || '-'} · dsh ${boot.dshVersion || '未安装'}`;
+  $('foot-meta').textContent = `v${boot.version} · ${boot.isPortable ? '便携版' : '安装版'} · Node ${boot.nodeVersion || '-'}${boot.nodeSource === 'system' ? '(系统)' : ''} · dsh ${boot.dshVersion || '未安装'}`;
   applySkin();
   applyState(boot.service || { state: 'idle' });
 
