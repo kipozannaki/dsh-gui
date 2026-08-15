@@ -1,15 +1,19 @@
 # DSH-GUI
 
-DeepSeek Harness 的 Windows 桌面客户端 —— **开箱即用**：内置 Node.js 运行时，免去手动安装 Node，首次启动自动部署 DSH 并在桌面窗口中直接使用 Web UI。
+[![GitHub](https://img.shields.io/badge/GitHub-kipozannaki%2Fdsh--gui-4F8CFF?style=flat-square&logo=github)](https://github.com/kipozannaki/dsh-gui)
+[![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/kipozannaki/dsh-gui?style=flat-square)](https://github.com/kipozannaki/dsh-gui/releases)
+
+DeepSeek Harness 的 Windows 桌面客户端 —— **开箱即用**：自动复用系统 Node.js（版本符合要求时免内置运行时），否则使用内置 Node；首次启动自动部署 DSH 并在桌面窗口中直接使用 Web UI。
 
 > 界面：深色现代风格（参考 Codex / Claude Code 设计语言），左侧边栏 + 顶部状态栏 + 嵌入的 DSH Web UI。
 
 ## ✨ 功能特性
 
-- 🟢 **自动运行时管理**：应用内置 Node.js ≥ 22.19.0（默认 22.20.0），不影响系统 PATH；首次启动自动检测并部署 `@deepseek-ai/dsh@0.1.0-rc.6`（版本锁定），全程可视化进度（进度条 + 状态文字）
+- 🟢 **自动运行时管理**：优先检测并复用系统 Node.js（≥ 22.19.0 时跳过内置运行时），不满足或缺失时自动使用内置 Node（≥ 22.19.0）；首次启动自动检测并部署 `@deepseek-ai/dsh@0.1.0-rc.6`（版本锁定），全程可视化进度（进度条 + 状态文字）
 - 🚀 **免浏览器**：启动后自动在 `127.0.0.1` 拉起 `dsh web` 服务并直接嵌入窗口；端口 3080 被占用时自动改用空闲端口；窗口关闭自动终止 DSH 子进程（进程树清理，不留孤儿）
 - 🪟 **桌面 GUI**：Electron 原生窗口，深色现代风格（参考 Codex / Claude Code）；左侧边栏（会话 / 工作区 / 日志）、顶部状态栏（服务状态实时反馈：启动中 / 运行中 / 已停止 / 错误）、自定义窗口控制
-- 🎨 **换肤**：5 套预设背景主题（纯色 / 渐变 / 抽象）+ 自定义图片上传，支持融合强度与模糊调节，设置持久化保存
+- 🎨 **换肤（壁纸透出）**：5 套预设背景主题 + 自定义图片上传；DSH 界面所有白色区域自动透明化，壁纸完整透出而文字保持清晰；「界面透出强度」0-100% 可调，页面切换/动态渲染不失效
 - 🖥️ **托盘常驻**：关闭窗口最小化到系统托盘，后台服务继续运行；托盘菜单：显示主窗口 / 在浏览器中打开 / 查看日志 / 完全退出
 - 🌏 **国内用户优化**：内置 npmmirror 镜像加速开关（默认开启），首次部署走国内镜像
 - 🔑 **首次使用引导**：自动检测 API Key 是否已配置，未配置时提示前往设置页
@@ -17,10 +21,12 @@ DeepSeek Harness 的 Windows 桌面客户端 —— **开箱即用**：内置 No
 
 ## 📦 安装与分发
 
+👉 **下载地址**：[GitHub Releases](https://github.com/kipozannaki/dsh-gui/releases)（`DSH-GUI-Setup-1.0.0.exe` / `DSH-GUI-Portable-1.0.0.exe`）
+
 | 产物 | 说明 |
 | --- | --- |
-| `dist/DSH-GUI-Setup-1.0.0.exe` | NSIS 安装版：安装到系统，自动创建桌面快捷方式与开始菜单快捷方式，可自定义安装目录；数据存于 `%APPDATA%\DSH-GUI\` |
-| `dist/DSH-GUI-Portable-1.0.0.exe` | 便携版：免安装、双击即用，可放 U 盘；数据存于 exe 同目录的 `data\` 文件夹 |
+| `DSH-GUI-Setup-1.0.0.exe` | NSIS 安装版：安装到系统，自动创建桌面快捷方式与开始菜单快捷方式，可自定义安装目录；数据存于 `%APPDATA%\DSH-GUI\` |
+| `DSH-GUI-Portable-1.0.0.exe` | 便携版：免安装、双击即用，可放 U 盘；数据存于 exe 同目录的 `data\` 文件夹 |
 
 卸载：安装版通过「控制面板 / 设置 → 应用」完整卸载程序文件；数据目录默认保留（可选手动删除 `%APPDATA%\DSH-GUI`）。
 
@@ -68,15 +74,22 @@ npm start
 
 ## 📄 技术说明
 
-- **桌面框架**：Electron + electron-builder
-- **内嵌 Node**：`scripts/fetch-node.mjs` 从 npmmirror 下载官方 Node win-x64 包并只解出运行所需文件（node.exe + npm），打包进 `resources/node-runtime`
+- **桌面框架**：Electron + electron-builder（NSIS 安装版 + portable 便携版）
+- **Node 运行时**：启动时探测系统 Node，版本 ≥ 22.19.0 直接复用（npm/npx 同步跟随系统）；否则使用内置运行时（`scripts/fetch-node.mjs` 从 npmmirror 下载官方 Node win-x64 并只解出运行所需文件）
 - **DSH 集成**：`main.js` 用 `child_process` 以 `node <dsh>/lib/bin.js web --host 127.0.0.1 --port N` 启动服务；`DSH_HOME` 指向应用数据目录，实现完全便携；`--port 0` + 解析 `dsh web: http://127.0.0.1:PORT` 输出完成端口自动选择
 - **版本锁定**：`@deepseek-ai/dsh@0.1.0-rc.6`（`main.js` 中 `DSH_VERSION` 常量），避免上游更新导致兼容性问题
 - **安全**：渲染层 `contextIsolation` + 无 `nodeIntegration`，仅通过 preload 桥接白名单 IPC；DSH Web UI 以 `<webview partition="persist:dsh-gui-web">` 隔离加载
+- **图标**：`scripts/make-icon.ps1` 使用 GDI+ 抗锯齿绘制（蓝紫渐变 + 字母 + 光泽）
 
 ## 🤝 开源协议
 
 [MIT](LICENSE)，与上游 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)（MIT）保持一致。
+
+## 🔗 相关链接
+
+- **本项目仓库**：[github.com/kipozannaki/dsh-gui](https://github.com/kipozannaki/dsh-gui)（Issues / PR 欢迎）
+- **Release 下载**：[github.com/kipozannaki/dsh-gui/releases](https://github.com/kipozannaki/dsh-gui/releases)
+- **上游项目**：[deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)
 
 ## ⚠️ 免责声明
 
