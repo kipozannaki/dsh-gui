@@ -13,7 +13,7 @@
   "scripts": {
     "start": "electron .",
     "fetch:node": "node scripts/fetch-node.mjs",
-    "icons": "node scripts/make-icon.mjs",
+    "icons": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/make-icon.ps1",
     "dist": "electron-builder --win",
     "dist:installer": "electron-builder --win nsis",
     "dist:portable": "electron-builder --win portable",
