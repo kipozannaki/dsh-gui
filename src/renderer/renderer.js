@@ -220,27 +220,30 @@ function applySkin() {
  * 壁纸透出：把 DSH 界面中所有白色/浅色背景统一改为 rgba(255,255,255,strength)。
  * strength 0 = 全部透明（壁纸完整透出，仅保留文字）；1 = 原样白底。
  * 非白色功能性背景（警告条、选中高亮、遮罩等）与文字颜色均不受影响。
- * 通过 MutationObserver 持续处理 SPA 动态渲染的新元素。
+ * 健壮性：
+ *  - 强度存全局 window.__dshSkinStrength，滑块变化时只需更新它并重扫
+ *  - MutationObserver 即时处理 SPA 动态渲染；setInterval 每秒轮询兜底，
+ *    覆盖页面切换/整块重渲染等 observer 可能漏掉的场景
  */
 function injectDshSkin() {
   const wv = $('dsh-web');
   if (!wv || !wv.src) return;
   const strength = Math.min(1, Math.max(0, boot.config.skin.dshOpacity ?? 0));
   const script = `(() => {
-    const strength = ${strength};
+    window.__dshSkinStrength = ${strength};
     const isLight = (c) => {
       const m = c.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/);
       return !!m && (+m[1] >= 230 && +m[2] >= 230 && +m[3] >= 230);
     };
     const apply = () => {
+      const s = window.__dshSkinStrength;
       for (const el of document.querySelectorAll('body, *')) {
-        const s = getComputedStyle(el);
-        if (isLight(s.backgroundColor)) {
-          el.style.setProperty('background-color', 'rgba(255,255,255,' + strength + ')', 'important');
+        const cs = getComputedStyle(el);
+        if (isLight(cs.backgroundColor)) {
+          el.style.setProperty('background-color', 'rgba(255,255,255,' + s + ')', 'important');
         }
       }
     };
-    apply();
     if (!window.__dshSkinObserver) {
       let scheduled = false;
       window.__dshSkinObserver = new MutationObserver(() => {
@@ -250,7 +253,9 @@ function injectDshSkin() {
         }
       });
       window.__dshSkinObserver.observe(document.body, { childList: true, subtree: true });
+      window.__dshSkinTimer = setInterval(apply, 1000);
     }
+    apply();
   })()`;
   try {
     wv.executeJavaScript(script).catch(() => {});
