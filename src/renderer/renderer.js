@@ -424,7 +424,7 @@ async function init() {
     if (port >= 1024 && port <= 65535) {
       bridge.setConfig({ port });
       boot.config.port = port;
-      toast('端口已更新，重启服务后生效');
+      toast('首选端口已更新，重启服务后将按新端口重新固定（登录状态会重置一次）');
     } else {
       e.target.value = boot.config.port;
       toast('端口需在 1024-65535 之间', true);

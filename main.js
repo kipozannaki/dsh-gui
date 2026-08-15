@@ -108,6 +108,7 @@ function tailFile(file, maxLines = 300) {
 // ---------------------------------------------------------------------------
 const DEFAULT_CONFIG = {
   port: DEFAULT_PORT,
+  servicePort: null, // 实际固定的服务端口（持久化，保证登录态稳定）
   mirror: true,
   autoLaunch: false,
   autoRestart: true,
@@ -565,16 +566,22 @@ async function _startService(retryWithRandom = false) {
       }
     }
 
-    // 端口选择：默认 3080，被占用则交给系统分配（--port 0）
-    let port = config.port || DEFAULT_PORT;
-    if (retryWithRandom) port = 0;
-    else {
-      setServiceState('starting', `检查端口 ${port} 可用性…`);
-      const busy = await probePort(port);
-      if (busy) {
-        log(`端口 ${port} 已被占用，改用系统空闲端口`);
-        port = 0;
+    // 端口选择（端口固定对登录态至关重要：DSH 前端用 localStorage 按 origin 存登录态，
+    // 端口一变即视为新站点 → 每次都要重新登录）：
+    //   1) 已固定的服务端口（config.servicePort，持久化）→ 2) 用户首选端口 → 3) 系统随机
+    let port = 0;
+    if (!retryWithRandom) {
+      const candidates = [config.servicePort, config.port || DEFAULT_PORT].filter((p) => Number.isInteger(p) && p > 0);
+      for (const cand of candidates) {
+        setServiceState('starting', `检查端口 ${cand} 可用性…`);
+        const busy = await probePort(cand);
+        if (!busy) {
+          port = cand;
+          break;
+        }
+        log(`端口 ${cand} 已被占用，尝试下一个`);
       }
+      if (port === 0) log('首选端口均被占用，改用系统空闲端口');
     }
 
     const launch = (launchPort) => {
@@ -611,6 +618,12 @@ async function _startService(retryWithRandom = false) {
         if (m && service && service.state !== 'running') {
           service.port = Number(m[1]);
           service.url = `http://127.0.0.1:${service.port}`;
+          // 固定并持久化实际端口：保证下次启动 origin 不变，登录状态（localStorage）不丢
+          if (config.servicePort !== service.port) {
+            config.servicePort = service.port;
+            saveConfig();
+            log(`已固定服务端口 ${service.port}（持久化保存，确保登录状态稳定）`);
+          }
           setServiceState('running', `服务运行于 ${service.url}`);
         }
       };
@@ -833,6 +846,8 @@ function registerIpc() {
   ipcMain.handle('config:get', () => config);
   ipcMain.handle('config:set', (_e, patch) => {
     if (patch && typeof patch === 'object') {
+      // 用户修改首选端口 → 重置已固定的服务端口（下次启动按新首选端口重新固定）
+      if (patch.port !== undefined) config.servicePort = null;
       config = { ...config, ...patch };
       if (patch.skin) config.skin = { ...config.skin, ...patch.skin };
       saveConfig();
