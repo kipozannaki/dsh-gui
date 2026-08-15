@@ -1,0 +1,93 @@
+{
+  "name": "dsh-gui",
+  "productName": "DSH-GUI",
+  "version": "1.0.0",
+  "description": "DeepSeek Harness 桌面客户端：内置 Node.js 运行时，开箱即用，免手动安装 Node，直接以桌面窗口使用 dsh Web UI",
+  "main": "main.js",
+  "author": {
+    "name": "DSH-GUI Contributors",
+    "email": "dsh-gui@example.com"
+  },
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "fetch:node": "node scripts/fetch-node.mjs",
+    "icons": "node scripts/make-icon.mjs",
+    "dist": "electron-builder --win",
+    "dist:installer": "electron-builder --win nsis",
+    "dist:portable": "electron-builder --win portable",
+    "dist:dir": "electron-builder --win dir"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.dshgui.desktop",
+    "productName": "DSH-GUI",
+    "copyright": "Copyright © 2025 DSH-GUI Contributors (MIT)",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "webview-preload.js",
+      "src/renderer/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/node-runtime",
+        "to": "node-runtime",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "resources/icon.png",
+        "to": "icon.png"
+      },
+      {
+        "from": "resources/tray.png",
+        "to": "tray.png"
+      }
+    ],
+    "win": {
+      "icon": "resources/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "DSH-GUI-${version}-${target}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "DSH-GUI",
+      "uninstallDisplayName": "DSH-GUI",
+      "deleteAppDataOnUninstall": false,
+      "installerIcon": "resources/icon.ico",
+      "uninstallerIcon": "resources/icon.ico",
+      "installerHeaderIcon": "resources/icon.ico",
+      "artifactName": "DSH-GUI-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "DSH-GUI-Portable-${version}.${ext}"
+    },
+    "electronDownload": {
+      "mirror": "https://registry.npmmirror.com/-/binary/electron/"
+    },
+    "electronDist": "node_modules/electron/dist",
+    "npmRebuild": false
+  }
+}

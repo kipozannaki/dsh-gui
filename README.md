@@ -1,0 +1,83 @@
+# DSH-GUI
+
+DeepSeek Harness 的 Windows 桌面客户端 —— **开箱即用**：内置 Node.js 运行时，免去手动安装 Node，首次启动自动部署 DSH 并在桌面窗口中直接使用 Web UI。
+
+> 界面：深色现代风格（参考 Codex / Claude Code 设计语言），左侧边栏 + 顶部状态栏 + 嵌入的 DSH Web UI。
+
+## ✨ 功能特性
+
+- 🟢 **自动运行时管理**：应用内置 Node.js ≥ 22.19.0（默认 22.20.0），不影响系统 PATH；首次启动自动检测并部署 `@deepseek-ai/dsh@0.1.0-rc.6`（版本锁定），全程可视化进度（进度条 + 状态文字）
+- 🚀 **免浏览器**：启动后自动在 `127.0.0.1` 拉起 `dsh web` 服务并直接嵌入窗口；端口 3080 被占用时自动改用空闲端口；窗口关闭自动终止 DSH 子进程（进程树清理，不留孤儿）
+- 🪟 **桌面 GUI**：Electron 原生窗口，深色现代风格（参考 Codex / Claude Code）；左侧边栏（会话 / 工作区 / 日志）、顶部状态栏（服务状态实时反馈：启动中 / 运行中 / 已停止 / 错误）、自定义窗口控制
+- 🎨 **换肤**：5 套预设背景主题（纯色 / 渐变 / 抽象）+ 自定义图片上传，支持融合强度与模糊调节，设置持久化保存
+- 🖥️ **托盘常驻**：关闭窗口最小化到系统托盘，后台服务继续运行；托盘菜单：显示主窗口 / 在浏览器中打开 / 查看日志 / 完全退出
+- 🌏 **国内用户优化**：内置 npmmirror 镜像加速开关（默认开启），首次部署走国内镜像
+- 🔑 **首次使用引导**：自动检测 API Key 是否已配置，未配置时提示前往设置页
+- 🧩 **复用已有安装**：若检测到用户已安装 DSH（本地运行时 / npm 全局 / npx 缓存），直接启动，跳过安装流程
+
+## 📦 安装与分发
+
+| 产物 | 说明 |
+| --- | --- |
+| `dist/DSH-GUI-Setup-1.0.0.exe` | NSIS 安装版：安装到系统，自动创建桌面快捷方式与开始菜单快捷方式，可自定义安装目录；数据存于 `%APPDATA%\DSH-GUI\` |
+| `dist/DSH-GUI-Portable-1.0.0.exe` | 便携版：免安装、双击即用，可放 U 盘；数据存于 exe 同目录的 `data\` 文件夹 |
+
+卸载：安装版通过「控制面板 / 设置 → 应用」完整卸载程序文件；数据目录默认保留（可选手动删除 `%APPDATA%\DSH-GUI`）。
+
+## 🛠️ 从源码构建
+
+要求：Node.js ≥ 22（本机已装 Node 即可构建；最终产物内置自己的运行时）。
+
+```powershell
+# 1. 安装依赖（国内镜像加速）
+$env:ELECTRON_MIRROR = "https://npmmirror.com/mirrors/electron/"
+$env:ELECTRON_BUILDER_BINARIES_MIRROR = "https://npmmirror.com/mirrors/electron-builder-binaries/"
+npm install
+
+# 2. 下载内置 Node 运行时（v22.x ≥ 22.19.0）
+npm run fetch:node
+
+# 3. 生成图标
+npm run icons
+
+# 4. 构建（NSIS 安装版 + 便携版）
+npm run dist
+# 单独构建：npm run dist:installer / npm run dist:portable
+
+# 开发模式运行（不打包）
+npm start
+```
+
+产物位于 `dist/`：`DSH-GUI-Setup-1.0.0.exe`、`DSH-GUI-Portable-1.0.0.exe`。
+
+## 🧭 首次使用
+
+1. 双击运行 DSH-GUI（安装版或便携版均可）
+2. 首次启动自动部署运行环境（若检测到本机已安装 DSH 则跳过）——进度条实时显示
+3. 服务就绪后自动加载 DSH Web UI，若未配置 API Key 会弹出引导横幅
+4. 配置 API Key 后即可开始使用
+
+## 🔧 数据目录
+
+| 模式 | 位置 |
+| --- | --- |
+| 便携版 | exe 同目录 `data\`（`config.json` 设置、`dsh-home\` DSH 主目录、`dsh-runtime\` DSH 运行时、`logs\` 日志、`themes\` 背景图） |
+| 安装版 | `%APPDATA%\DSH-GUI\`（同上结构） |
+
+在「设置 → 服务」中可一键打开数据 / 日志 / DSH 主目录。
+
+## 📄 技术说明
+
+- **桌面框架**：Electron + electron-builder
+- **内嵌 Node**：`scripts/fetch-node.mjs` 从 npmmirror 下载官方 Node win-x64 包并只解出运行所需文件（node.exe + npm），打包进 `resources/node-runtime`
+- **DSH 集成**：`main.js` 用 `child_process` 以 `node <dsh>/lib/bin.js web --host 127.0.0.1 --port N` 启动服务；`DSH_HOME` 指向应用数据目录，实现完全便携；`--port 0` + 解析 `dsh web: http://127.0.0.1:PORT` 输出完成端口自动选择
+- **版本锁定**：`@deepseek-ai/dsh@0.1.0-rc.6`（`main.js` 中 `DSH_VERSION` 常量），避免上游更新导致兼容性问题
+- **安全**：渲染层 `contextIsolation` + 无 `nodeIntegration`，仅通过 preload 桥接白名单 IPC；DSH Web UI 以 `<webview partition="persist:dsh-gui-web">` 隔离加载
+
+## 🤝 开源协议
+
+[MIT](LICENSE)，与上游 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)（MIT）保持一致。
+
+## ⚠️ 免责声明
+
+本项目为社区开源项目，与 DeepSeek 官方无隶属关系；DSH 本体（`@deepseek-ai/dsh`）版权归其原作者所有。

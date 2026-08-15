@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.log
+.tmp/
+
+# Local dev data (dev mode 数据目录)
+.dev-data/
+
+# Local npm cache used by tooling
+.npm-cache/
+.electron-cache/
+.eb-cache/
+
+# Smoke-test scratch
+.smoke/
+
+# Embedded Node runtime (由 `npm run fetch:node` 生成，不提交仓库)
+resources/node-runtime/
+
+# OS
+Thumbs.db
+.DS_Store

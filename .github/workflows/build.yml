@@ -1,0 +1,56 @@
+name: build-release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (China mirror)
+        shell: pwsh
+        run: |
+          $env:ELECTRON_MIRROR = "https://registry.npmmirror.com/-/binary/electron/"
+          $env:ELECTRON_BUILDER_BINARIES_MIRROR = "https://npmmirror.com/mirrors/electron-builder-binaries/"
+          npm install
+
+      - name: Fetch embedded Node runtime
+        run: npm run fetch:node
+
+      - name: Generate icons
+        run: npm run icons
+
+      - name: Build (NSIS installer + portable)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ELECTRON_MIRROR: "https://registry.npmmirror.com/-/binary/electron/"
+          ELECTRON_BUILDER_BINARIES_MIRROR: "https://npmmirror.com/mirrors/electron-builder-binaries/"
+        run: npm run dist
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-gui-dist
+          path: |
+            dist/*.exe
+            dist/latest.yml
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            dist/DSH-GUI-Setup-*.exe
+            dist/DSH-GUI-Portable-*.exe
+          fail_on_unmatched_files: false

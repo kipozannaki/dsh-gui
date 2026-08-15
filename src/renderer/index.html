@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; img-src 'self' file: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self' data:;" />
+  <title>DSH-GUI</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-skin="midnight">
+  <img id="bg-img" alt="" aria-hidden="true" />
+  <div id="bg-tint" aria-hidden="true"></div>
+
+  <div id="app">
+    <!-- ============ 左侧边栏 ============ -->
+    <aside id="sidebar">
+      <div class="brand">
+        <div class="brand-mark">DSH</div>
+        <div class="brand-text">
+          <div class="brand-name">DSH-GUI</div>
+          <div class="brand-sub">DeepSeek Harness 桌面版</div>
+        </div>
+      </div>
+
+      <nav id="nav">
+        <button class="nav-item active" data-view="home"><span class="nav-ico">◈</span>主页</button>
+        <button class="nav-item" data-view="sessions"><span class="nav-ico">☰</span>会话</button>
+        <button class="nav-item" data-view="workspace"><span class="nav-ico">▦</span>工作区</button>
+        <button class="nav-item" data-view="logs"><span class="nav-ico">≡</span>日志</button>
+        <button class="nav-item" data-view="settings"><span class="nav-ico">⚙</span>设置</button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div class="status-card" id="status-card">
+          <div class="status-row">
+            <span class="dot" id="status-dot"></span>
+            <span class="status-text" id="status-text">启动中…</span>
+          </div>
+          <div class="status-url" id="status-url"></div>
+          <div class="status-actions">
+            <button id="btn-browser" title="在浏览器中打开">在浏览器中打开</button>
+            <button id="btn-restart" title="重启服务">重启服务</button>
+          </div>
+        </div>
+        <div class="foot-meta" id="foot-meta"></div>
+      </div>
+    </aside>
+
+    <!-- ============ 主区域 ============ -->
+    <div id="main">
+      <header id="topbar">
+        <div class="drag-zone"></div>
+        <div class="top-title">DSH-GUI</div>
+        <div class="status-pill" id="status-pill">
+          <span class="dot" id="pill-dot"></span>
+          <span id="pill-text">启动中</span>
+        </div>
+        <div class="top-spacer"></div>
+        <button class="tb-btn" id="btn-reload" title="重新加载界面">⟳</button>
+        <button class="tb-btn" id="btn-browser2" title="在浏览器中打开">↗</button>
+        <button class="tb-btn" id="btn-settings" title="设置">⚙</button>
+        <div class="win-controls">
+          <button class="wc-btn" id="wc-min" title="最小化">─</button>
+          <button class="wc-btn" id="wc-max" title="最大化">□</button>
+          <button class="wc-btn wc-close" id="wc-close" title="最小化到托盘">✕</button>
+        </div>
+      </header>
+
+      <div id="content">
+        <!-- DSH Web UI 嵌入 -->
+        <div id="view-home" class="view">
+          <webview id="dsh-web" partition="persist:dsh-gui-web" allowpopups="false"></webview>
+          <div id="blend" aria-hidden="true"></div>
+        </div>
+
+        <!-- 日志视图 -->
+        <div id="view-logs" class="view hidden">
+          <div class="logs-head">
+            <div class="logs-tabs">
+              <button class="log-tab active" data-tab="gui">GUI 日志</button>
+              <button class="log-tab" data-tab="web">DSH 服务日志</button>
+            </div>
+            <div class="logs-actions">
+              <span id="log-live" class="live-dot">● 实时</span>
+              <button class="ghost-btn" id="btn-log-clear">清屏</button>
+              <button class="ghost-btn" id="btn-log-open">打开日志目录</button>
+            </div>
+          </div>
+          <pre class="log-viewer" id="log-viewer"></pre>
+        </div>
+
+        <!-- 部署/安装覆盖层 -->
+        <div id="overlay-install" class="overlay hidden">
+          <div class="panel-card install-card">
+            <div class="install-ico">◉</div>
+            <h2 id="install-title">首次运行：正在部署运行环境</h2>
+            <p class="install-desc" id="install-desc">检测到尚未安装 DSH，正在自动安装（使用国内镜像加速）…</p>
+            <div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div>
+            <div class="progress-text" id="progress-text">准备中…</div>
+            <div class="progress-detail" id="progress-detail"></div>
+          </div>
+        </div>
+
+        <!-- 错误覆盖层 -->
+        <div id="overlay-error" class="overlay hidden">
+          <div class="panel-card error-card">
+            <div class="error-ico">⚠</div>
+            <h2>服务启动失败</h2>
+            <p class="error-msg" id="error-msg"></p>
+            <div class="error-actions">
+              <button class="primary-btn" id="btn-retry">重试</button>
+              <button class="ghost-btn" id="btn-error-logs">查看日志</button>
+              <button class="ghost-btn" id="btn-error-reinstall">重新安装 DSH</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 首次使用引导 -->
+        <div id="banner-apikey" class="banner hidden">
+          <span class="banner-ico">🔑</span>
+          <span class="banner-text">尚未检测到 API Key — 配置后即可开始使用 DeepSeek Harness</span>
+          <button class="primary-btn small" id="btn-goto-settings">去设置</button>
+          <button class="ghost-btn small" id="btn-dismiss-apikey">稍后</button>
+        </div>
+
+        <!-- 设置抽屉 -->
+        <div id="drawer-settings" class="drawer hidden">
+          <div class="drawer-head">
+            <h2>设置</h2>
+            <button class="tb-btn" id="btn-close-settings">✕</button>
+          </div>
+          <div class="drawer-body">
+            <section class="set-section">
+              <h3>服务</h3>
+              <div class="set-row">
+                <label for="set-port">首选端口</label>
+                <input type="number" id="set-port" min="1024" max="65535" />
+                <span class="hint">被占用时自动改用空闲端口</span>
+              </div>
+              <div class="set-row">
+                <label for="set-mirror">国内镜像加速</label>
+                <label class="switch"><input type="checkbox" id="set-mirror" /><span class="slider"></span></label>
+                <span class="hint">安装 DSH 时使用 npmmirror 镜像</span>
+              </div>
+              <div class="set-row">
+                <label for="set-autorestart">服务异常自动重启</label>
+                <label class="switch"><input type="checkbox" id="set-autorestart" /><span class="slider"></span></label>
+              </div>
+              <div class="set-row">
+                <label for="set-autolaunch">开机自启动</label>
+                <label class="switch"><input type="checkbox" id="set-autolaunch" /><span class="slider"></span></label>
+              </div>
+              <div class="set-actions">
+                <button class="primary-btn" id="btn-service-restart">重启服务</button>
+                <button class="danger-btn" id="btn-reinstall">重新安装 DSH</button>
+              </div>
+              <div class="set-links">
+                <button class="link-btn" data-open="data">打开数据目录</button>
+                <button class="link-btn" data-open="logs">打开日志目录</button>
+                <button class="link-btn" data-open="home">打开 DSH 主目录</button>
+              </div>
+            </section>
+
+            <section class="set-section">
+              <h3>外观（背景换肤）</h3>
+              <div class="skin-grid" id="skin-grid"></div>
+              <div class="set-row">
+                <label>自定义背景图</label>
+                <div class="file-wrap">
+                  <input type="file" id="file-wallpaper" accept="image/png,image/jpeg,image/webp" />
+                  <button class="ghost-btn" id="btn-upload">选择图片…</button>
+                  <button class="ghost-btn" id="btn-remove-wallpaper">移除</button>
+                </div>
+              </div>
+              <div class="set-row">
+                <label for="set-opacity">背景融合强度</label>
+                <input type="range" id="set-opacity" min="0" max="80" step="1" />
+              </div>
+              <div class="set-row">
+                <label for="set-blur">背景模糊</label>
+                <input type="range" id="set-blur" min="0" max="60" step="1" />
+              </div>
+            </section>
+
+            <section class="set-section">
+              <h3>关于</h3>
+              <div class="about-grid" id="about-grid"></div>
+              <p class="about-links">
+                上游项目：<a href="https://github.com/deepseek-ai/deepseek-harness" target="_blank" rel="noreferrer">deepseek-ai/deepseek-harness</a>
+                · 本应用以 MIT 协议开源
+              </p>
+              <div class="set-actions">
+                <button class="danger-btn" id="btn-quit-app">完全退出应用</button>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toasts"></div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
