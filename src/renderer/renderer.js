@@ -217,23 +217,43 @@ function applySkin() {
 }
 
 /**
- * 把 DSH 界面的页面背景改为透明：壁纸完整透出。
- * 强度 0 = 完全透明（默认）；100 = 原样白底。
- * 页面内的文字/卡片背景不受影响，保持原样清晰。
+ * 壁纸透出：把 DSH 界面中所有白色/浅色背景统一改为 rgba(255,255,255,strength)。
+ * strength 0 = 全部透明（壁纸完整透出，仅保留文字）；1 = 原样白底。
+ * 非白色功能性背景（警告条、选中高亮、遮罩等）与文字颜色均不受影响。
+ * 通过 MutationObserver 持续处理 SPA 动态渲染的新元素。
  */
 function injectDshSkin() {
   const wv = $('dsh-web');
   if (!wv || !wv.src) return;
-  const skin = boot.config.skin;
-  const strength = Math.min(1, Math.max(0, skin.dshOpacity ?? 0));
-  const css = [
-    'html, body, #root, [class*="_frame"], [class*="_root"] {',
-    `  background-color: rgba(255, 255, 255, ${strength}) !important;`,
-    '  background-image: none !important;',
-    '}'
-  ].join('\n');
+  const strength = Math.min(1, Math.max(0, boot.config.skin.dshOpacity ?? 0));
+  const script = `(() => {
+    const strength = ${strength};
+    const isLight = (c) => {
+      const m = c.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/);
+      return !!m && (+m[1] >= 230 && +m[2] >= 230 && +m[3] >= 230);
+    };
+    const apply = () => {
+      for (const el of document.querySelectorAll('body, *')) {
+        const s = getComputedStyle(el);
+        if (isLight(s.backgroundColor)) {
+          el.style.setProperty('background-color', 'rgba(255,255,255,' + strength + ')', 'important');
+        }
+      }
+    };
+    apply();
+    if (!window.__dshSkinObserver) {
+      let scheduled = false;
+      window.__dshSkinObserver = new MutationObserver(() => {
+        if (!scheduled) {
+          scheduled = true;
+          requestAnimationFrame(() => { scheduled = false; apply(); });
+        }
+      });
+      window.__dshSkinObserver.observe(document.body, { childList: true, subtree: true });
+    }
+  })()`;
   try {
-    wv.insertCSS(css).catch(() => {});
+    wv.executeJavaScript(script).catch(() => {});
   } catch { /* ignore */ }
 }
 
@@ -403,7 +423,7 @@ async function init() {
     bridge.setConfig({ skin: { dshOpacity } });
     injectDshSkin();
     if (dshOpacity >= 1) toast('DSH 界面已恢复原样白底（100% 不透明）');
-    else if (dshOpacity <= 0) toast('DSH 界面背景已完全透明，壁纸完整透出');
+    else if (dshOpacity <= 0) toast('DSH 界面所有白色区域已透明，壁纸完整透出');
   });
   $('btn-upload').addEventListener('click', () => $('file-wallpaper').click());
   $('file-wallpaper').addEventListener('change', async (e) => {
