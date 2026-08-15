@@ -2,7 +2,19 @@
 /* DSH-GUI 渲染层逻辑：状态机、视图、换肤、设置、日志、窗口控制 */
 
 const $ = (id) => document.getElementById(id);
-const dshGui = window.dshGui;
+const bridge = window.dshBridge;
+
+// 防御：preload 桥接缺失时给出明确提示，避免"静默空壳"
+if (!bridge) {
+  const root = document.getElementById('app');
+  if (root) {
+    root.innerHTML =
+      '<div style="display:flex;height:100vh;align-items:center;justify-content:center;color:#ff6b6b;font-size:15px;font-family:Segoe UI,Microsoft YaHei,sans-serif;padding:30px;text-align:center;line-height:1.8">' +
+      '预加载桥接失败（preload.js 未加载）。<br>请重新安装应用；若问题持续，请查看日志目录中的 gui.log。' +
+      '</div>';
+  }
+  throw new Error('dshBridge is not available');
+}
 
 let boot = null;
 let currentView = 'home';
@@ -93,7 +105,7 @@ function applyState(s) {
 
 async function checkApiKey() {
   try {
-    const ok = await dshGui.apiKeyStatus();
+    const ok = await bridge.apiKeyStatus();
     if (!ok) {
       apikeyBannerShown = true;
       $('banner-apikey').classList.remove('hidden');
@@ -172,7 +184,7 @@ function stopLogPolling() {
 }
 async function refreshLogs() {
   try {
-    const data = await dshGui.logTail();
+    const data = await bridge.logTail();
     const lines = logTab === 'gui' ? data.gui : data.web;
     const viewer = $('log-viewer');
     const nearBottom = viewer.scrollHeight - viewer.scrollTop - viewer.clientHeight < 60;
@@ -224,7 +236,7 @@ function renderSkinGrid() {
     card.addEventListener('click', () => {
       const patch = { skin: { ...boot.config.skin, preset: p.id } };
       if (p.id !== 'image') patch.skin.image = null;
-      dshGui.setConfig(patch).then(() => {
+      bridge.setConfig(patch).then(() => {
         boot.config.skin = patch.skin;
         applySkin();
       });
@@ -268,16 +280,16 @@ function renderAbout() {
 // ---------------------------------------------------------------------------
 async function init() {
   // 窗口控制
-  $('wc-min').addEventListener('click', () => dshGui.winMinimize());
+  $('wc-min').addEventListener('click', () => bridge.winMinimize());
   $('wc-max').addEventListener('click', async () => {
-    const max = await dshGui.winMaximizeToggle();
+    const max = await bridge.winMaximizeToggle();
     $('wc-max').textContent = max ? '❐' : '□';
   });
   $('wc-close').addEventListener('click', () => {
     toast('已最小化到系统托盘，后台服务继续运行');
-    dshGui.winHide();
+    bridge.winHide();
   });
-  dshGui.onMaximized((v) => { $('wc-max').textContent = v ? '❐' : '□'; });
+  bridge.onMaximized((v) => { $('wc-max').textContent = v ? '❐' : '□'; });
 
   // 导航
   document.querySelectorAll('.nav-item').forEach((b) =>
@@ -289,20 +301,20 @@ async function init() {
     const wv = $('dsh-web');
     if (wv.src) { wv.reload(); toast('已重新加载'); }
   });
-  $('btn-browser').addEventListener('click', () => dshGui.openBrowser());
-  $('btn-browser2').addEventListener('click', () => dshGui.openBrowser());
+  $('btn-browser').addEventListener('click', () => bridge.openBrowser());
+  $('btn-browser2').addEventListener('click', () => bridge.openBrowser());
   $('btn-restart').addEventListener('click', async () => {
     toast('正在重启服务…');
-    await dshGui.restartService();
+    await bridge.restartService();
   });
 
   // 状态订阅
-  dshGui.onState((s) => {
+  bridge.onState((s) => {
     if (s.dshVersion) boot = { ...boot, dshVersion: s.dshVersion };
     if (s.nodeVersion) boot = { ...boot, nodeVersion: s.nodeVersion };
     applyState(s);
   });
-  dshGui.onWebviewStatus((s) => {
+  bridge.onWebviewStatus((s) => {
     if (!s.ok && s.code && s.code !== -3) {
       // -3 = ERR_ABORTED（正常重载），忽略
       toast(`页面加载失败：${s.desc || s.code}`, true);
@@ -328,7 +340,7 @@ async function init() {
   // 错误覆盖层
   $('btn-retry').addEventListener('click', async () => {
     $('overlay-error').classList.add('hidden');
-    await dshGui.restartService();
+    await bridge.restartService();
   });
   $('btn-error-logs').addEventListener('click', () => switchView('logs'));
   $('btn-error-reinstall').addEventListener('click', reinstallDsh);
@@ -343,13 +355,13 @@ async function init() {
     })
   );
   $('btn-log-clear').addEventListener('click', () => { $('log-viewer').textContent = ''; });
-  $('btn-log-open').addEventListener('click', () => dshGui.openPath('logs'));
+  $('btn-log-open').addEventListener('click', () => bridge.openPath('logs'));
 
   // 设置控件
   $('set-port').addEventListener('change', (e) => {
     const port = parseInt(e.target.value, 10);
     if (port >= 1024 && port <= 65535) {
-      dshGui.setConfig({ port });
+      bridge.setConfig({ port });
       boot.config.port = port;
       toast('端口已更新，重启服务后生效');
     } else {
@@ -358,29 +370,29 @@ async function init() {
     }
   });
   $('set-mirror').addEventListener('change', (e) => {
-    dshGui.setConfig({ mirror: e.target.checked });
+    bridge.setConfig({ mirror: e.target.checked });
     boot.config.mirror = e.target.checked;
     toast(e.target.checked ? '已启用国内镜像加速' : '已关闭镜像加速');
   });
   $('set-autorestart').addEventListener('change', (e) => {
-    dshGui.setConfig({ autoRestart: e.target.checked });
+    bridge.setConfig({ autoRestart: e.target.checked });
     boot.config.autoRestart = e.target.checked;
   });
   $('set-autolaunch').addEventListener('change', (e) => {
-    dshGui.setConfig({ autoLaunch: e.target.checked });
+    bridge.setConfig({ autoLaunch: e.target.checked });
     boot.config.autoLaunch = e.target.checked;
     toast(e.target.checked ? '已开启开机自启动' : '已关闭开机自启动');
   });
   $('set-opacity').addEventListener('input', (e) => {
     const opacity = parseInt(e.target.value, 10) / 100;
     boot.config.skin.opacity = opacity;
-    dshGui.setConfig({ skin: { opacity } });
+    bridge.setConfig({ skin: { opacity } });
     applySkin();
   });
   $('set-blur').addEventListener('input', (e) => {
     const blur = parseInt(e.target.value, 10);
     boot.config.skin.blur = blur;
-    dshGui.setConfig({ skin: { blur } });
+    bridge.setConfig({ skin: { blur } });
     applySkin();
   });
   $('btn-upload').addEventListener('click', () => $('file-wallpaper').click());
@@ -389,10 +401,10 @@ async function init() {
     if (!file) return;
     const ext = (file.name.split('.').pop() || 'png').toLowerCase();
     const buf = await file.arrayBuffer();
-    const res = await dshGui.saveWallpaper(buf, ext);
+    const res = await bridge.saveWallpaper(buf, ext);
     if (res.ok) {
       boot.config.skin = { ...boot.config.skin, preset: 'image', image: res.file };
-      await dshGui.setConfig({ skin: boot.config.skin });
+      await bridge.setConfig({ skin: boot.config.skin });
       applySkin();
       toast('背景图已应用');
     } else {
@@ -401,25 +413,25 @@ async function init() {
     e.target.value = '';
   });
   $('btn-remove-wallpaper').addEventListener('click', async () => {
-    if (boot.config.skin.image) await dshGui.deleteWallpaper(boot.config.skin.image);
+    if (boot.config.skin.image) await bridge.deleteWallpaper(boot.config.skin.image);
     boot.config.skin = { ...boot.config.skin, preset: 'midnight', image: null };
-    await dshGui.setConfig({ skin: boot.config.skin });
+    await bridge.setConfig({ skin: boot.config.skin });
     applySkin();
   });
 
   $('btn-service-restart').addEventListener('click', async () => {
     closeSettings();
     toast('正在重启服务…');
-    await dshGui.restartService();
+    await bridge.restartService();
   });
   document.querySelectorAll('.link-btn[data-open]').forEach((b) =>
-    b.addEventListener('click', () => dshGui.openPath(b.dataset.open))
+    b.addEventListener('click', () => bridge.openPath(b.dataset.open))
   );
-  $('btn-quit-app').addEventListener('click', () => dshGui.winQuit());
+  $('btn-quit-app').addEventListener('click', () => bridge.winQuit());
   $('btn-reinstall').addEventListener('click', reinstallDsh);
 
   // 加载引导数据
-  boot = await dshGui.bootstrap();
+  boot = await bridge.bootstrap();
   $('foot-meta').textContent = `v${boot.version} · ${boot.isPortable ? '便携版' : '安装版'} · Node ${boot.nodeVersion || '-'} · dsh ${boot.dshVersion || '未安装'}`;
   applySkin();
   applyState(boot.service || { state: 'idle' });
@@ -427,7 +439,7 @@ async function init() {
   // 首次进入时若服务尚未运行则自动启动（主进程已自动启动）
   if (!boot.service || (boot.service.state !== 'running' && boot.service.state !== 'starting' && boot.service.state !== 'installing')) {
     if (boot.service && boot.service.state === 'idle') {
-      dshGui.startService();
+      bridge.startService();
     }
   }
 }
@@ -442,7 +454,7 @@ async function reinstallDsh() {
   $('progress-text').textContent = '正在重新安装…';
   $('progress-detail').textContent = '';
   try {
-    const res = await dshGui.reinstallDsh();
+    const res = await bridge.reinstallDsh();
     if (res && !res.ok) {
       $('overlay-install').classList.add('hidden');
       toast('重新安装失败：' + (res.error || '未知错误'), true);

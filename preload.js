@@ -1,10 +1,11 @@
 'use strict';
 /**
- * preload.js — 安全桥接（contextBridge），渲染层只能通过 window.dshGui 访问受控 API。
+ * preload.js — 安全桥接（contextBridge），渲染层只能通过 window.dshBridge 访问受控 API。
+ * 注意：暴露名使用 dshBridge，避免与页面脚本中的标识符产生全局词法冲突。
  */
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('dshGui', {
+contextBridge.exposeInMainWorld('dshBridge', {
   bootstrap: () => ipcRenderer.invoke('app:bootstrap'),
   onState: (cb) => {
     const listener = (_e, payload) => cb(payload);
