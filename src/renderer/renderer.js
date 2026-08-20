@@ -47,7 +47,7 @@ function toast(text, isErr = false) {
 // ---------------------------------------------------------------------------
 const STATE_TEXT = {
   idle: '空闲',
-  installing: '部署中…',
+  installing: '获取 DSH 中…',
   starting: '启动中…',
   running: '运行中',
   stopping: '停止中…',
@@ -324,7 +324,7 @@ function renderAbout() {
   $('about-grid').innerHTML = [
     ['应用版本', boot.version],
     ['Node 运行时', nodeLabel],
-    ['DSH 版本', boot.dshVersion || '未安装'],
+    ['DSH 版本', boot.dshVersion || '最新版（npx 自动获取）'],
     ['运行模式', boot.isPortable ? '便携版（数据在 exe 同目录 data/）' : '安装版（数据在 %APPDATA%/DSH-GUI/）'],
     ['数据目录', boot.dataDir],
     ['DSH 主目录', boot.dshHome]
@@ -404,7 +404,7 @@ async function init() {
     await bridge.restartService();
   });
   $('btn-error-logs').addEventListener('click', () => switchView('logs'));
-  $('btn-error-reinstall').addEventListener('click', reinstallDsh);
+  $('btn-error-reinstall').addEventListener('click', updateDsh);
 
   // 日志视图
   document.querySelectorAll('.log-tab').forEach((t) =>
@@ -485,11 +485,11 @@ async function init() {
     b.addEventListener('click', () => bridge.openPath(b.dataset.open))
   );
   $('btn-quit-app').addEventListener('click', () => bridge.winQuit());
-  $('btn-reinstall').addEventListener('click', reinstallDsh);
+  $('btn-reinstall').addEventListener('click', updateDsh);
 
   // 加载引导数据
   boot = await bridge.bootstrap();
-  $('foot-meta').textContent = `v${boot.version} · ${boot.isPortable ? '便携版' : '安装版'} · Node ${boot.nodeVersion || '-'}${boot.nodeSource === 'system' ? '(系统)' : ''} · dsh ${boot.dshVersion || '未安装'}`;
+  $('foot-meta').textContent = `v${boot.version} · ${boot.isPortable ? '便携版' : '安装版'} · Node ${boot.nodeVersion || '-'}${boot.nodeSource === 'system' ? '(系统)' : ''} · dsh ${boot.dshVersion || 'npx 最新版'}`;
   applySkin();
   applyState(boot.service || { state: 'idle' });
 
@@ -501,24 +501,24 @@ async function init() {
   }
 }
 
-async function reinstallDsh() {
-  const ok = window.confirm('重新安装 DSH 将停止当前服务并重新下载 @deepseek-ai/dsh@0.1.0-rc.6，确定继续吗？');
+async function updateDsh() {
+  const ok = window.confirm('更新 DSH 将清除本机 npx 中的 DSH 缓存并重启服务，npx 会自动重新下载最新版，确定继续吗？');
   if (!ok) return;
   closeSettings();
   installDetail = [];
   $('overlay-install').classList.remove('hidden');
   $('progress-bar').style.width = '4%';
-  $('progress-text').textContent = '正在重新安装…';
+  $('progress-text').textContent = '正在清除缓存并获取最新版 DSH…';
   $('progress-detail').textContent = '';
   try {
-    const res = await bridge.reinstallDsh();
+    const res = await bridge.updateDsh();
     if (res && !res.ok) {
       $('overlay-install').classList.add('hidden');
-      toast('重新安装失败：' + (res.error || '未知错误'), true);
+      toast('更新 DSH 失败：' + (res.error || '未知错误'), true);
     }
   } catch (err) {
     $('overlay-install').classList.add('hidden');
-    toast('重新安装失败：' + err.message, true);
+    toast('更新 DSH 失败：' + err.message, true);
   }
 }
 

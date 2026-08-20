@@ -1,7 +1,7 @@
 {
   "name": "dsh-gui",
   "productName": "DSH-GUI",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "DeepSeek Harness 桌面客户端：内置 Node.js 运行时，开箱即用，免手动安装 Node，直接以桌面窗口使用 dsh Web UI",
   "main": "main.js",
   "author": {

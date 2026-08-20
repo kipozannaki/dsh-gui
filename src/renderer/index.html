@@ -92,8 +92,8 @@
         <div id="overlay-install" class="overlay hidden">
           <div class="panel-card install-card">
             <div class="install-ico">◉</div>
-            <h2 id="install-title">首次运行：正在部署运行环境</h2>
-            <p class="install-desc" id="install-desc">检测到尚未安装 DSH，正在自动安装（使用国内镜像加速）…</p>
+            <h2 id="install-title">首次运行：正在获取 DSH</h2>
+            <p class="install-desc" id="install-desc">正在通过 npx 自动获取最新版 DSH（使用国内镜像加速）…</p>
             <div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div>
             <div class="progress-text" id="progress-text">准备中…</div>
             <div class="progress-detail" id="progress-detail"></div>
@@ -109,7 +109,7 @@
             <div class="error-actions">
               <button class="primary-btn" id="btn-retry">重试</button>
               <button class="ghost-btn" id="btn-error-logs">查看日志</button>
-              <button class="ghost-btn" id="btn-error-reinstall">重新安装 DSH</button>
+              <button class="ghost-btn" id="btn-error-reinstall">更新 / 重装 DSH</button>
             </div>
           </div>
         </div>
@@ -139,7 +139,7 @@
               <div class="set-row">
                 <label for="set-mirror">国内镜像加速</label>
                 <label class="switch"><input type="checkbox" id="set-mirror" /><span class="slider"></span></label>
-                <span class="hint">安装 DSH 时使用 npmmirror 镜像</span>
+                <span class="hint">npx 下载 DSH 时使用 npmmirror 镜像</span>
               </div>
               <div class="set-row">
                 <label for="set-autorestart">服务异常自动重启</label>
@@ -151,7 +151,7 @@
               </div>
               <div class="set-actions">
                 <button class="primary-btn" id="btn-service-restart">重启服务</button>
-                <button class="danger-btn" id="btn-reinstall">重新安装 DSH</button>
+                <button class="danger-btn" id="btn-reinstall">更新 / 重装 DSH</button>
               </div>
               <div class="set-links">
                 <button class="link-btn" data-open="data">打开数据目录</button>

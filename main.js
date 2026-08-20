@@ -11,8 +11,7 @@ const path = require('node:path');
 const net = require('node:net');
 const os = require('node:os');
 
-const DSH_PACKAGE = '@deepseek-ai/dsh';
-const DSH_VERSION = '0.1.0-rc.6'; // 版本锁定：与官方 rc 版本区分，保证稳定性
+const DSH_PACKAGE = '@deepseek-ai/dsh'; // 不带版本号：npx 走本地缓存，更新靠"更新 DSH"清缓存重取
 const DEFAULT_PORT = 3080;
 const LOG_MAX_BYTES = 8 * 1024 * 1024;
 const APP_ID = 'com.dshgui.desktop';
@@ -23,12 +22,11 @@ const APP_ID = 'com.dshgui.desktop';
 let mainWindow = null;
 let tray = null;
 let service = null; // { proc, mode, port, url, state, startedAt, retriedPort }
-let installProc = null; // 安装中的 npm 进程（退出时清理）
 let webviewWC = null;
 let quitting = false;
 let config = {};
 let nodeInfo = null; // { dir, bin, version }
-let dshInfo = null; // { bin, version, source }
+let dshVersion = null; // 从 npx 缓存读到的 DSH 版本（用于界面显示）
 
 const APP = {
   isPortable: false,
@@ -305,7 +303,7 @@ function ensureNpmrc() {
 }
 
 // ---------------------------------------------------------------------------
-// DSH 检测与安装
+// npx 缓存工具（DSH 由 npx 负责下载与缓存，这里只读版本 / 清缓存更新）
 // ---------------------------------------------------------------------------
 function readDshVersion(dir) {
   try {
@@ -314,6 +312,46 @@ function readDshVersion(dir) {
   } catch {
     return null;
   }
+}
+
+let _npxCacheRoot = null;
+
+/** 用户 npm 缓存根目录（npx 的 _npx 缓存位于其下，与用户自己运行 npx 共享）。 */
+async function npxCacheRoot() {
+  if (_npxCacheRoot) return _npxCacheRoot;
+  const out = (await runNode([npmCliJs(), 'config', 'get', 'cache'], 10000, true)).stdout.trim();
+  _npxCacheRoot = out ||
+    path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'npm-cache');
+  return _npxCacheRoot;
+}
+
+/** 扫描用户 npx 缓存中的 DSH：返回 { bin, version } 或 null。 */
+async function scanNpxDsh() {
+  const npxRoot = path.join(await npxCacheRoot(), '_npx');
+  try {
+    for (const entry of fs.readdirSync(npxRoot)) {
+      const modulesDir = path.join(npxRoot, entry, 'node_modules');
+      const version = readDshVersion(modulesDir);
+      if (version) return { bin: path.join(modulesDir, '@deepseek-ai', 'dsh', 'lib', 'bin.js'), version };
+    }
+  } catch { /* 缓存不存在 = 尚未下载过 */ }
+  return null;
+}
+
+/** 清除 npx 缓存中的 DSH 条目（只删 dsh，不动其他包）。返回删除的条目数。 */
+async function clearNpxDshCache() {
+  const npxRoot = path.join(await npxCacheRoot(), '_npx');
+  let removed = 0;
+  try {
+    for (const entry of fs.readdirSync(npxRoot)) {
+      const modulesDir = path.join(npxRoot, entry, 'node_modules');
+      if (readDshVersion(modulesDir)) {
+        fs.rmSync(path.join(npxRoot, entry), { recursive: true, force: true });
+        removed++;
+      }
+    }
+  } catch { /* ignore */ }
+  return removed;
 }
 
 function runNode(args, timeoutMs = 30000, useUserCache = false) {
@@ -347,142 +385,6 @@ function runNode(args, timeoutMs = 30000, useUserCache = false) {
   });
 }
 
-/**
- * 检测用户环境中已有的 DSH（本地运行时 > 全局安装 > npx 缓存）。
- * 命中即跳过安装流程，直接启动。
- */
-async function detectExistingDsh() {
-  if (process.env.DSH_GUI_FORCE_INSTALL) {
-    log('DSH_GUI_FORCE_INSTALL 已设置，跳过已有安装检测');
-    return null;
-  }
-  // 1) 应用自己的运行时
-  const local = path.join(APP.runtimeDir, 'node_modules');
-  const v1 = readDshVersion(local);
-  if (v1) {
-    log(`检测到本地已安装 DSH v${v1}，跳过安装`);
-    return { bin: path.join(local, '@deepseek-ai', 'dsh', 'lib', 'bin.js'), version: v1, source: 'local' };
-  }
-  // 2) 全局安装（npm root -g，以及 Windows 常见全局前缀）
-  const g = await runNode([npmCliJs(), 'root', '-g']);
-  const candidates = [(g.stdout || '').trim(), path.join(process.env.APPDATA || '', 'npm', 'node_modules')];
-  for (const gDir of candidates) {
-    if (!gDir) continue;
-    const v2 = readDshVersion(gDir);
-    if (v2) {
-      log(`检测到全局 DSH v${v2}（${gDir}），跳过安装`);
-      return { bin: path.join(gDir, '@deepseek-ai', 'dsh', 'lib', 'bin.js'), version: v2, source: 'global' };
-    }
-  }
-  // 3) npx 缓存直接扫描：用户的 npm 缓存下所有 _npx/* 条目（不依赖 npx 版本解析）
-  const cacheDir = (await runNode([npmCliJs(), 'config', 'get', 'cache'], 10000, true)).stdout.trim() ||
-    path.join(process.env.LOCALAPPDATA || '', 'npm-cache');
-  const npxRoot = path.join(cacheDir, '_npx');
-  try {
-    for (const entry of fs.readdirSync(npxRoot)) {
-      const entryDir = path.join(npxRoot, entry, 'node_modules');
-      const v3 = readDshVersion(entryDir);
-      if (v3) {
-        log(`检测到 npx 缓存 DSH v${v3}（${entryDir}），跳过安装`);
-        return { bin: path.join(entryDir, '@deepseek-ai', 'dsh', 'lib', 'bin.js'), version: v3, source: 'npx' };
-      }
-    }
-  } catch (err) {
-    log('扫描 npx 缓存失败:', err.message);
-  }
-  // 4) npx --no-install 兜底（某些特殊安装位置）
-  const nx = await runNode([npxCliJs(), '--no-install', `${DSH_PACKAGE}@${DSH_VERSION}`, '--version'], 10000, true);
-  if (nx.code === 0 && (nx.stdout || '').trim()) {
-    const v4 = (nx.stdout || '').trim().split(/\s+/).pop();
-    log(`检测到 npx 可执行 DSH ${v4}，跳过安装`);
-    return { bin: null, version: v4, source: 'npx' }; // bin 为空时用 npx 启动
-  }
-  return null;
-}
-
-async function verifyInstalled() {
-  const dir = path.join(APP.runtimeDir, 'node_modules');
-  const version = readDshVersion(dir);
-  if (!version) return null;
-  const check = await runNode([path.join(dir, '@deepseek-ai', 'dsh', 'lib', 'bin.js'), '--version'], 15000);
-  if (check.code !== 0) {
-    log(`DSH 校验失败: ${(check.stderr || '').slice(0, 300)}`);
-    return null;
-  }
-  return { bin: path.join(dir, '@deepseek-ai', 'dsh', 'lib', 'bin.js'), version, source: 'local' };
-}
-
-/** 安装 DSH 到应用数据目录（国内镜像 + 可视化进度）。 */
-async function installDsh(onProgress) {
-  const node = await resolveNode();
-  ensureNpmrc();
-  const step = (pct, text, stage = 'install') => onProgress && onProgress({ stage, pct, text });
-
-  step(5, '准备内置 Node 运行时', 'prepare');
-  fs.rmSync(APP.runtimeDir, { recursive: true, force: true });
-  fs.mkdirSync(APP.runtimeDir, { recursive: true });
-
-  const registry = config.mirror ? 'https://registry.npmmirror.com' : 'https://registry.npmjs.org';
-  step(12, `配置 npm 镜像：${registry}`, 'prepare');
-
-  const args = [
-    npmCliJs(),
-    'install',
-    '--prefix',
-    APP.runtimeDir,
-    `${DSH_PACKAGE}@${DSH_VERSION}`,
-    '--no-audit',
-    '--no-fund',
-    '--no-update-notifier',
-    '--loglevel=notice',
-    '--progress=false'
-  ];
-
-  return await new Promise((resolve) => {
-    const p = spawn(node.bin, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: nodeEnv() });
-    installProc = p;
-    let out = '';
-    const finish = (value) => {
-      if (installProc === p) installProc = null;
-      resolve(value);
-    };
-    p.stdout.on('data', (d) => {
-      const s = d.toString('utf8');
-      out += s;
-      const added = s.match(/added (\d+) packages/);
-      const reified = s.match(/reify:.*?(\d+)/g);
-      const pct = added ? 95 : reified ? Math.min(88, 12 + 70) : 15;
-      step(pct, s.split('\n').filter(Boolean).pop() || '正在下载依赖…', 'install');
-    });
-    p.stderr.on('data', (d) => {
-      const s = d.toString('utf8');
-      out += s;
-      step(15, s.split('\n').filter(Boolean).pop() || '正在安装…', 'install');
-    });
-    p.on('error', (e) => {
-      log('安装进程启动失败:', e.message);
-      finish({ ok: false, error: e.message, out });
-    });
-    p.on('close', async (code) => {
-      step(96, '校验安装结果…', 'verify');
-      if (code !== 0) {
-        log(`npm install 退出码 ${code}`);
-        finish({ ok: false, error: `npm install 失败（退出码 ${code}）`, out });
-        return;
-      }
-      const info = await verifyInstalled();
-      if (!info) {
-        finish({ ok: false, error: '安装完成但校验失败，请检查网络后重试', out });
-        return;
-      }
-      step(100, `DSH v${info.version} 安装完成`, 'done');
-      log(`DSH 安装完成: v${info.version}`);
-      dshInfo = info;
-      finish({ ok: true, info, out });
-    });
-  });
-}
-
 // ---------------------------------------------------------------------------
 // 服务管理
 // ---------------------------------------------------------------------------
@@ -493,7 +395,7 @@ function broadcast() {
     url: service ? service.url : null,
     port: service ? service.port : null,
     mode: service ? service.mode : null,
-    dshVersion: dshInfo ? dshInfo.version : null,
+    dshVersion,
     nodeVersion: nodeInfo ? nodeInfo.version : null,
     nodeSource: nodeInfo ? nodeInfo.source : null,
     detail: service ? service.detail : '',
@@ -554,32 +456,11 @@ async function _startService(retryWithRandom = false) {
   try {
     const node = await resolveNode();
 
-    // 检测已有安装 → 跳过安装流程
-    if (!dshInfo) {
-      setServiceState('starting', '检测已有 DSH 安装…');
-      const existing = await detectExistingDsh();
-      if (existing) {
-        dshInfo = existing;
-      } else {
-        setServiceState('installing', '首次运行：正在部署 DSH 运行时…');
-        const result = await installDsh((progress) => {
-          if (service) service.progress = progress;
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('dsh:state', {
-              state: 'installing',
-              progress,
-              dshVersion: null,
-              nodeVersion: node.version,
-              isPortable: APP.isPortable,
-              dataDir: APP.dataDir
-            });
-          }
-        });
-        if (!result.ok) {
-          setServiceState('error', result.error);
-          return;
-        }
-      }
+    // 首次运行判断：npx 缓存中没有 DSH → 启动时 npx 会先下载（可视化进度）
+    const cached = await scanNpxDsh();
+    dshVersion = cached ? cached.version : null;
+    if (!cached) {
+      setServiceState('installing', '首次运行：npx 正在获取 DSH…');
     }
 
     // 端口选择（端口固定对登录态至关重要：DSH 前端用 localStorage 按 origin 存登录态，
@@ -589,7 +470,7 @@ async function _startService(retryWithRandom = false) {
     if (!retryWithRandom) {
       const candidates = [config.servicePort, config.port || DEFAULT_PORT].filter((p) => Number.isInteger(p) && p > 0);
       for (const cand of candidates) {
-        setServiceState('starting', `检查端口 ${cand} 可用性…`);
+        setServiceState(cached ? 'starting' : 'installing', `检查端口 ${cand} 可用性…`);
         const busy = await probePort(cand);
         if (!busy) {
           port = cand;
@@ -600,15 +481,33 @@ async function _startService(retryWithRandom = false) {
       if (port === 0) log('首选端口均被占用，改用系统空闲端口');
     }
 
+    // npx 下载进度（仅首次运行）：把 npx 的 npm 输出映射到安装覆盖层
+    let installPct = 10;
+    const reportInstallProgress = (s) => {
+      if (!mainWindow || mainWindow.isDestroyed() || !service || service.state !== 'installing') return;
+      const line = s.split(/\r?\n/).filter(Boolean).pop() || '';
+      if (/added \d+ packages/.test(s)) installPct = Math.max(installPct, 90);
+      else installPct = Math.min(80, installPct + 4);
+      mainWindow.webContents.send('dsh:state', {
+        state: 'installing',
+        progress: { stage: 'install', pct: installPct, text: line || '正在下载 DSH…' },
+        dshVersion: null,
+        nodeVersion: node.version,
+        isPortable: APP.isPortable,
+        dataDir: APP.dataDir
+      });
+    };
+
     const launch = (launchPort) => {
+      // 有缓存：直接运行缓存中的 dsh（等价于 npx 解析到的结果，免网络、秒启动、可离线）
+      // 无缓存：通过 npx 下载（首次运行 / 更新后），下载完成后落缓存，下次走缓存直跑
       let args;
       let env;
-      if (dshInfo.bin) {
-        args = [dshInfo.bin, 'web', '--host', '127.0.0.1', '--port', String(launchPort)];
+      if (cached && cached.bin) {
+        args = [cached.bin, 'web', '--host', '127.0.0.1', '--port', String(launchPort)];
         env = nodeEnv();
       } else {
-        // 复用 npx 缓存中的 DSH：通过 npx 启动（使用用户自己的 npm 缓存）
-        args = [npxCliJs(), '-y', `${DSH_PACKAGE}@${DSH_VERSION}`, 'web', '--host', '127.0.0.1', '--port', String(launchPort)];
+        args = [npxCliJs(), '-y', DSH_PACKAGE, 'web', '--host', '127.0.0.1', '--port', String(launchPort)];
         env = npxEnv();
       }
       log(`启动 dsh web: ${node.bin} ${args.join(' ')}`);
@@ -619,7 +518,7 @@ async function _startService(retryWithRandom = false) {
         env
       });
       service.proc = proc;
-      service.mode = dshInfo.source;
+      service.mode = 'npx';
       service.progress = null;
       service.logStream = createLogStream('dsh-web.log');
       service.retriedPort = false;
@@ -630,7 +529,9 @@ async function _startService(retryWithRandom = false) {
         output += s;
         if (output.length > 20000) output = output.slice(-20000);
         if (service.logStream) service.logStream.write(s);
-        const m = s.match(/dsh web: http:\/\/127\.0\.0\.1:(\d+)/);
+        if (service && service.state === 'installing') reportInstallProgress(s);
+        // 上游输出格式可能变化，宽松匹配本机地址 + 端口
+        const m = output.match(/https?:\/\/127\.0\.0\.1:(\d+)/);
         if (m && service && service.state !== 'running') {
           service.port = Number(m[1]);
           service.url = `http://127.0.0.1:${service.port}`;
@@ -641,6 +542,14 @@ async function _startService(retryWithRandom = false) {
             log(`已固定服务端口 ${service.port}（持久化保存，确保登录状态稳定）`);
           }
           setServiceState('running', `服务运行于 ${service.url}`);
+          // 启动完成后回读缓存中的实际版本号，更新界面显示
+          scanNpxDsh().then((found) => {
+            if (found && found.version !== dshVersion) {
+              dshVersion = found.version;
+              log(`DSH 版本: v${dshVersion}（npx 缓存）`);
+              broadcast();
+            }
+          });
         }
       };
       proc.stdout.on('data', handleData);
@@ -820,7 +729,10 @@ function createWindow() {
 function registerIpc() {
   ipcMain.handle('app:bootstrap', async () => {
     await resolveNode().catch(() => {});
-    if (!dshInfo) dshInfo = await detectExistingDsh().catch(() => null);
+    if (!dshVersion) {
+      const found = await scanNpxDsh().catch(() => null);
+      if (found) dshVersion = found.version;
+    }
     return {
       version: app.getVersion(),
       isPortable: APP.isPortable,
@@ -829,7 +741,7 @@ function registerIpc() {
       dshHome: APP.dshHome,
       nodeVersion: nodeInfo ? nodeInfo.version : null,
       nodeSource: nodeInfo ? nodeInfo.source : null,
-      dshVersion: dshInfo ? dshInfo.version : null,
+      dshVersion,
       config,
       service: service
         ? { state: service.state, url: service.url, port: service.port, mode: service.mode, detail: service.detail, progress: service.progress }
@@ -848,17 +760,14 @@ function registerIpc() {
     if (service && service.url) shell.openExternal(service.url);
     return service ? service.url : null;
   });
-  ipcMain.handle('service:install', async () => {
-    // 重新安装 DSH
+  ipcMain.handle('service:update', async () => {
+    // 更新 DSH：清除 npx 缓存中的 DSH → 重启服务时 npx 自动重新下载最新版
     stopService();
-    dshInfo = null;
-    const result = await installDsh((progress) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('dsh:state', { state: 'installing', progress });
-      }
-    });
-    if (result.ok) startService();
-    return result.ok ? { ok: true } : { ok: false, error: result.error };
+    const removed = await clearNpxDshCache();
+    dshVersion = null;
+    log(`已清除 ${removed} 个 npx DSH 缓存条目，重启服务后将重新下载最新版`);
+    setTimeout(() => startService(), 500);
+    return { ok: true, removed };
   });
 
   ipcMain.handle('config:get', () => config);
@@ -948,6 +857,15 @@ if (!gotLock) {
     }
     loadConfig();
     ensureNpmrc();
+    // 一次性清理：旧版本地安装目录（现已改为 npx 启动，不再需要）
+    if (fs.existsSync(APP.runtimeDir)) {
+      try {
+        fs.rmSync(APP.runtimeDir, { recursive: true, force: true });
+        log(`已清理旧版本地 DSH 安装目录: ${APP.runtimeDir}`);
+      } catch (err) {
+        log('清理旧版安装目录失败:', err.message);
+      }
+    }
     log('========================================');
     log(`DSH-GUI v${app.getVersion()} 启动`);
     log(`模式: ${APP.isPortable ? '便携版' : '安装版'}`);
@@ -974,11 +892,6 @@ if (!gotLock) {
   });
 
   app.on('will-quit', () => {
-    if (installProc) {
-      log('应用退出，终止安装进程…');
-      try { installProc.kill(); } catch { /* ignore */ }
-      killTree(installProc.pid);
-    }
     if (service && service.proc) {
       log('应用退出，终止 DSH 子进程…');
       try { service.proc.kill(); } catch { /* ignore */ }

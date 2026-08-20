@@ -27,7 +27,7 @@ contextBridge.exposeInMainWorld('dshBridge', {
   stopService: () => ipcRenderer.invoke('service:stop'),
   restartService: () => ipcRenderer.invoke('service:restart'),
   openBrowser: () => ipcRenderer.invoke('service:openBrowser'),
-  reinstallDsh: () => ipcRenderer.invoke('service:install'),
+  updateDsh: () => ipcRenderer.invoke('service:update'),
 
   getConfig: () => ipcRenderer.invoke('config:get'),
   setConfig: (patch) => ipcRenderer.invoke('config:set', patch),
